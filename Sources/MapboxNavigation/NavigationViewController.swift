@@ -231,7 +231,7 @@ open class NavigationViewController: UIViewController, NavigationStatusPresenter
         }
     }
     
-    var router: Router {
+    public var router: Router {
         navigationService.router
     }
     
@@ -556,7 +556,7 @@ open class NavigationViewController: UIViewController, NavigationStatusPresenter
         }
     }
         
-    var containerViewController: UIViewController {
+    public var containerViewController: UIViewController {
         return self
     }
     
@@ -565,7 +565,8 @@ open class NavigationViewController: UIViewController, NavigationStatusPresenter
     var bottomViewController: ContainerViewController?
     
     var arrivalController: ArrivalController?
-    var cameraController: CameraController?
+    public var cameraController: CameraController?
+    
     var ornamentsController: OrnamentsController?
     var routeOverlayController: NavigationMapView.RouteOverlayController?
     var viewObservers: [NavigationComponentDelegate?] = []
@@ -573,7 +574,12 @@ open class NavigationViewController: UIViewController, NavigationStatusPresenter
     func setupControllers(_ navigationOptions: NavigationOptions?) {
         arrivalController = ArrivalController(self)
         routeOverlayController = NavigationMapView.RouteOverlayController(self)
-        cameraController = CameraController(self)
+        if let cameraController = navigationOptions?.cameraController {
+            self.cameraController = cameraController
+        } else {
+            cameraController = CameraController(self)
+        }
+        
         ornamentsController = OrnamentsController(self, eventsManager: navigationService.eventsManager)
         
         viewObservers = [
