@@ -1,5 +1,16 @@
 # Changes to the Mapbox Navigation SDK for iOS
 
+## v2.9.0
+
+### Map
+
+* `NavigationMapView.removeAlternativeRoutes()` and `NavigationMapView.removeContinuousAlternativeRoutesDurations()` were made public to provide a way to remove previously shown alternative routes and alternative routes duration annotations, respectively. ([#4134](https://github.com/mapbox/mapbox-navigation-ios/pull/4134))
+
+### Other changes
+
+* Additional parameters were added to `FloatingButton.rounded(image:selectedImage:size:type:cornerRadius)` to be able to provide button type and corner radius. ([#4060](https://github.com/mapbox/mapbox-navigation-ios/pull/4060))
+* `FloatingButton` no longer contains corner radius shadow, border is applied instead. ([#4060](https://github.com/mapbox/mapbox-navigation-ios/pull/4060))
+
 ## v2.8.0
 
 ### Packaging
@@ -33,6 +44,7 @@
 * Improved the pronunciation of junction names in Japanese in Japan. ([#4085](https://github.com/mapbox/mapbox-navigation-ios/pull/4085))
 * At a fork or exit on an expressway in Japan, spoken instructions now mention the junction name and side of the road but no longer mention the expressway name or number that the user would stay on. ([#4085](https://github.com/mapbox/mapbox-navigation-ios/pull/4085))
 * Fixed confusing instructions to take the roundabout in the Russian localization. ([#4085](https://github.com/mapbox/mapbox-navigation-ios/pull/4085))
+* Fixed the crashes occured in guidance instructions during offline navigation. ([#4147](https://github.com/mapbox/mapbox-navigation-ios/pull/4147))
 
 ### Routing
 
@@ -44,7 +56,8 @@
 * Curvy roads are penalized slightly more consistently. ([#4085](https://github.com/mapbox/mapbox-navigation-ios/pull/4085))
 * You can now set `Waypoint.allowsSnappingToStaticallyClosedRoad` to `true` to allow the waypoint to snap to a road that is fully closed for long-term construction. ([#4085](https://github.com/mapbox/mapbox-navigation-ios/pull/4085))
 * Added `NavigationSettings.liveIncidentsOptions` to configure how incidents data is fetched. ([#4088](https://github.com/mapbox/mapbox-navigation-ios/pull/4088))
-* Added `NavigationSettings.statusPollingConfig` to configure navigator status polling options. ([#4135](https://github.com/mapbox/mapbox-navigation-ios/pull/4135))
+* Added `NavigationSettings.statusUpdatingSettings` to configure navigator status polling options. ([#4135](https://github.com/mapbox/mapbox-navigation-ios/pull/4135))
+* Added `RouterDelegate.router(_:modifiedOptionsForReroute:)`, `NavigationServiceDelegate.navigationService(_:modifiedOptionsForReroute:)` and `NavigationViewControllerDelegate.navigationViewController(_:modifiedOptionsForReroute:)` methods to allow `RouteOptions` customization on reroutes. ([#4102](https://github.com/mapbox/mapbox-navigation-ios/pull/4102))
 * Fixed incorrect duration calculations and route refreshing when an arrival step’s geometry contained only one coordinate. Normally, an arrival step’s geometry is expected to be a zero-length `LineString`; that is, with two coincident coordinates. ([#4110](https://github.com/mapbox/mapbox-navigation-ios/pull/4110))
 * Routes now respect conditional access restrictions that depend on the year. ([#4144](https://github.com/mapbox/mapbox-navigation-ios/pull/4144))
 * Routes now respect conditional access restrictions that apply to [all vehicles](https://wiki.openstreetmap.org/wiki/Key:vehicle). ([#4144](https://github.com/mapbox/mapbox-navigation-ios/pull/4144))
