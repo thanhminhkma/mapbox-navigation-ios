@@ -1,8 +1,8 @@
 import Foundation
 import UIKit
 
-extension UIEdgeInsets {
-    public static func +(left: UIEdgeInsets, right: UIEdgeInsets) -> UIEdgeInsets {
+public extension UIEdgeInsets {
+    static func +(left: UIEdgeInsets, right: UIEdgeInsets) -> UIEdgeInsets {
         return UIEdgeInsets(top: left.top + right.top,
                             left: left.left + right.left,
                             bottom: left.bottom + right.bottom,

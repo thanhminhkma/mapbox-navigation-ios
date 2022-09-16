@@ -5,31 +5,31 @@ import MapboxMaps
 /// A component to ease camera manipulation logic.
 ///
 /// This class manages various scenarious from moving camera to a specific region on demand and handling device rotation, up to reacting to active guidance events.
-class CameraController: NavigationComponent, NavigationComponentDelegate {
+open class CameraController: NavigationComponent, NavigationComponentDelegate {
     
     // MARK: Properties
     
-    weak private(set) var navigationViewData: NavigationViewData!
+    public weak private(set) var navigationViewData: NavigationViewData!
     
-    private var navigationMapView: NavigationMapView {
+    public var navigationMapView: NavigationMapView {
         return navigationViewData.navigationView.navigationMapView
     }
     
-    private var router: Router {
+    public var router: Router {
         navigationViewData.router
     }
     
-    private var topBannerContainerView: BannerContainerView {
+    public var topBannerContainerView: BannerContainerView {
         return navigationViewData.navigationView.topBannerContainerView
     }
     
-    private var bottomBannerContainerView: BannerContainerView {
+    public var bottomBannerContainerView: BannerContainerView {
         return navigationViewData.navigationView.bottomBannerContainerView
     }
     
     // MARK: Methods
     
-    init(_ navigationViewData: NavigationViewData) {
+    public init(_ navigationViewData: NavigationViewData) {
         self.navigationViewData = navigationViewData
     }
     
@@ -61,7 +61,7 @@ class CameraController: NavigationComponent, NavigationComponentDelegate {
         recenter(sender, completion: nil)
     }
     
-    func recenter(_ sender: AnyObject, completion: ((CameraController, CLLocation) -> ())?) {
+    public func recenter(_ sender: AnyObject, completion: ((CameraController, CLLocation) -> ())?) {
         guard let location = navigationMapView.mostRecentUserCourseViewLocation else { return }
 
         navigationMapView.moveUserLocation(to: location)
@@ -76,7 +76,7 @@ class CameraController: NavigationComponent, NavigationComponentDelegate {
         navigationViewController?.navigationComponents.compactMap({ $0 as? NavigationMapInteractionObserver }).forEach { $0.navigationViewController(didCenterOn: location) }
     }
     
-    func center(on step: RouteStep,
+    public func center(on step: RouteStep,
                 route: Route,
                 legIndex: Int,
                 stepIndex: Int,
@@ -128,13 +128,13 @@ class CameraController: NavigationComponent, NavigationComponentDelegate {
         }
     }
     
-    private func updateNavigationCameraViewport() {
+    open func updateNavigationCameraViewport() {
         if let navigationViewportDataSource = navigationMapView.navigationCamera.viewportDataSource as? NavigationViewportDataSource {
             navigationViewportDataSource.viewportPadding = viewportPadding
         }
     }
 
-    private var viewportPadding: UIEdgeInsets {
+    open var viewportPadding: UIEdgeInsets {
         let courseViewMinimumInsets = UIEdgeInsets(top: 75.0, left: 75.0, bottom: 75.0, right: 75.0)
         var insets = navigationMapView.mapView.safeArea
         insets += courseViewMinimumInsets
@@ -161,7 +161,7 @@ class CameraController: NavigationComponent, NavigationComponentDelegate {
     
     // MARK: NavigationComponent Implementation
     
-    func navigationService(_ service: NavigationService, didUpdate progress: RouteProgress, with location: CLLocation, rawLocation: CLLocation) {
+    public func navigationService(_ service: NavigationService, didUpdate progress: RouteProgress, with location: CLLocation, rawLocation: CLLocation) {
         updateNavigationCameraViewport()
     }
     

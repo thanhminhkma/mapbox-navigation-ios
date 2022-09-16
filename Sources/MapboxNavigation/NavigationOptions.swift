@@ -65,6 +65,13 @@ open class NavigationOptions: NavigationCustomizable {
      */
     open var simulationMode: SimulationMode?
     
+    /**
+     The camera controller use to custom camera view port i
+     
+     If set to `nil` will default to `CameraController
+     */
+    open var cameraController: CameraController?
+    
     // This makes the compiler happy.
     required public init() {
         // do nothing
