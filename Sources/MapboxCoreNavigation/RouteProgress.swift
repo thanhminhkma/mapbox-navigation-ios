@@ -21,8 +21,6 @@ open class RouteProgress: Codable {
         self.routeOptions = options
         self.legIndex = legIndex
         
-        precondition(route.legs[legIndex].steps.count > 0, "Step is empty")
-        
         self.currentLegProgress = RouteLegProgress(leg: route.legs[legIndex], stepIndex: 0, spokenInstructionIndex: spokenInstructionIndex)
 
         self.calculateLegsCongestion()

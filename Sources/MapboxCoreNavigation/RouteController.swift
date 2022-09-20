@@ -810,6 +810,13 @@ extension RouteController: Router {
             BillingHandler.shared.stopBillingSession(with: sessionUUID)
             BillingHandler.shared.beginBillingSession(for: .activeGuidance, uuid: sessionUUID)
         }
+        
+        guard route.legs.count > 0,
+              route.legs[0].steps.count > 0 else {
+            completion?(false)
+            // Dont recevied route step.
+            return
+        }
 
         let routeOptions = routeOptions ?? routeProgress.routeOptions
         let routeProgress = RouteProgress(route: route, options: routeOptions)
