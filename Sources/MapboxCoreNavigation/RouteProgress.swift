@@ -20,6 +20,9 @@ open class RouteProgress: Codable {
         self.route = route
         self.routeOptions = options
         self.legIndex = legIndex
+        
+        precondition(route.legs[legIndex].steps.count > 0, "Step is empty")
+        
         self.currentLegProgress = RouteLegProgress(leg: route.legs[legIndex], stepIndex: 0, spokenInstructionIndex: spokenInstructionIndex)
 
         self.calculateLegsCongestion()
@@ -144,6 +147,9 @@ open class RouteProgress: Codable {
     public func refreshRoute(with refreshedRoute: RouteRefreshSource, at location: CLLocation) {
         route.refreshLegAttributes(from: refreshedRoute)
         route.refreshLegIncidents(from: refreshedRoute)
+        
+        precondition(route.legs[legIndex].steps.count > currentLegProgress.stepIndex, "Step is broken")
+        
         currentLegProgress = RouteLegProgress(leg: route.legs[legIndex],
                                               stepIndex: currentLegProgress.stepIndex,
                                               spokenInstructionIndex: currentLegProgress.currentStepProgress.spokenInstructionIndex)
@@ -179,6 +185,7 @@ open class RouteProgress: Codable {
         didSet {
             assert(legIndex >= 0 && legIndex < route.legs.endIndex)
             // TODO: Set stepIndex to 0 or last index based on whether leg index was incremented or decremented.
+            precondition(route.legs[legIndex].steps.count > 0, "Step is empty")
             currentLegProgress = RouteLegProgress(leg: currentLeg)
         }
     }
