@@ -10,7 +10,7 @@ import MapboxDirections
 class RerouteController {
 
     // MARK: Configuration
-    
+
     static let DefaultManeuverAvoidanceRadius: TimeInterval = 8.0
 
     var reroutesProactively: Bool = true {
@@ -37,11 +37,11 @@ class RerouteController {
             )
         }
     }
-    
+
     private var config: ConfigHandle
 
     // MARK: Reporting Data
-    
+
     weak var delegate: ReroutingControllerDelegate?
 
     func userIsOnRoute() -> Bool {
@@ -53,14 +53,14 @@ class RerouteController {
     }
 
     // MARK: Internal State Management
-    
+
     private let defaultRerouteController: RerouteControllerInterface
     private let rerouteDetector: RerouteDetectorInterface
-    
+
     private var reroutingRequest: NavigationProviderRequest?
     private var latestRouteResponse: (response: RouteResponse, options: RouteOptions)?
     private var isCancelled = false
-    
+
     private weak var navigator: MapboxNavigationNative.Navigator?
 
     func resetToDefaultSettings() {
@@ -90,7 +90,7 @@ extension RerouteController: RerouteObserver {
                                         routeResponse: route.getResponseJson()) else {
             return
         }
-        
+
         delegate?.rerouteControllerWantsSwitchToAlternative(self,
                                                             response: decoded.routeResponse,
                                                             routeIndex: Int(route.getRouteIndex()),
@@ -107,14 +107,14 @@ extension RerouteController: RerouteObserver {
 
     func onRerouteReceived(forRouteResponse routeResponse: String, routeRequest: String, origin: RouterOrigin) {
         guard reroutesProactively else { return }
-        
+
         guard let decodedRequest = Self.decode(routeRequest: routeRequest) else {
             delegate?.rerouteControllerDidFailToReroute(self, with: DirectionsError.invalidResponse(nil))
             return
         }
-        
+
         if let latestRouteResponse = latestRouteResponse,
-           decodedRequest.routeOptions == latestRouteResponse.options {
+            decodedRequest.routeOptions == latestRouteResponse.options {
             delegate?.rerouteControllerDidRecieveReroute(self,
                                                          response: latestRouteResponse.response,
                                                          options: latestRouteResponse.options,
@@ -127,7 +127,7 @@ extension RerouteController: RerouteObserver {
                 delegate?.rerouteControllerDidFailToReroute(self, with: DirectionsError.invalidResponse(nil))
                 return
             }
-            
+
             delegate?.rerouteControllerDidRecieveReroute(self,
                                                          response: decodedResponse,
                                                          options: decodedRequest.routeOptions,
@@ -138,14 +138,14 @@ extension RerouteController: RerouteObserver {
     func onRerouteCancelled() {
         latestRouteResponse = nil
         guard reroutesProactively else { return }
-        
+
         delegate?.rerouteControllerDidCancelReroute(self)
     }
 
     func onRerouteFailed(forError error: RerouteError) {
         latestRouteResponse = nil
         guard reroutesProactively else { return }
-        
+
         delegate?.rerouteControllerDidFailToReroute(self,
                                                     with: DirectionsError.unknown(response: nil,
                                                                                   underlying: ReroutingError(error),
@@ -157,9 +157,9 @@ extension RerouteController: RerouteObserver {
 extension RerouteController {
     static internal func decode(routeRequest: String, routeResponse: String) -> (routeOptions: RouteOptions, routeResponse: RouteResponse)? {
         guard let decodedRequest = decode(routeRequest: routeRequest),
-              let decodedResponse = decode(routeResponse: routeResponse,
-                                           routeOptions: decodedRequest.routeOptions,
-                                           credentials: decodedRequest.credentials) else {
+            let decodedResponse = decode(routeResponse: routeResponse,
+                                         routeOptions: decodedRequest.routeOptions,
+                                         credentials: decodedRequest.credentials) else {
             return nil
         }
 
@@ -168,8 +168,8 @@ extension RerouteController {
 
     static internal func decode(routeRequest: String) -> (routeOptions: RouteOptions, credentials: Credentials)? {
         guard let requestURL = URL(string: routeRequest),
-              let routeOptions = RouteOptions(url: requestURL) else {
-                  return nil
+            let routeOptions = RouteOptions(url: requestURL) else {
+            return nil
         }
 
         return (routeOptions: routeOptions,
@@ -199,20 +199,21 @@ extension RerouteController: RerouteControllerInterface {
                                                type: .cancelled)))
             return
         }
-        
+
         guard let customRoutingProvider = customRoutingProvider else {
             callback(.init(error: RerouteError(message: "Custom rerouting triggered with no proper rerouting provider.",
                                                type: .routerError)))
             return
         }
-        
+
         guard let routeOptions = RouteOptions(url: URL(string: url)!) else {
             callback(.init(error: RerouteError(message: "Unable to decode route request for rerouting.",
                                                type: .routerError)))
             return
         }
-        
-        reroutingRequest = customRoutingProvider.calculateRoutes(options: routeOptions) { session, result in
+
+        reroutingRequest = customRoutingProvider.calculateRoutes(options: routeOptions) { [weak self] session, result in
+            guard let self = self else { return }
             switch result {
             case .failure(let error):
                 callback(.init(error: RerouteError(message: error.localizedDescription,
