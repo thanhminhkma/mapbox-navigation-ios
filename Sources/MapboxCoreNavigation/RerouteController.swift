@@ -78,9 +78,15 @@ class RerouteController {
         self.navigator?.addRerouteObserver(for: self)
     }
 
+    func invalidate() {
+        navigator?.removeRerouteObserver(for: self)
+        navigator?.setRerouteControllerForController(defaultRerouteController.nativeInterface)
+    }
+
     deinit {
         self.navigator?.removeRerouteObserver(for: self)
         self.navigator?.setRerouteControllerForController(defaultRerouteController)
+        invalidate()
     }
 }
 
@@ -212,7 +218,8 @@ extension RerouteController: RerouteControllerInterface {
             return
         }
         
-        reroutingRequest = customRoutingProvider.calculateRoutes(options: routeOptions) { session, result in
+        reroutingRequest = customRoutingProvider.calculateRoutes(options: routeOptions) { [weak self] result in
+            guard let self = self else { return }
             switch result {
             case .failure(let error):
                 callback(.init(error: RerouteError(message: error.localizedDescription,
