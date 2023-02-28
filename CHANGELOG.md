@@ -1,5 +1,58 @@
 # Changes to the Mapbox Navigation SDK for iOS
 
+## v2.11.0
+
+### Packaging
+
+* MapboxCoreNavigation now requires [MapboxNavigationNative v126._x_](https://github.com/mapbox/mapbox-navigation-native-ios/releases/tag/126.0.0). ([#4367](https://github.com/mapbox/mapbox-navigation-ios/pull/4367))
+* MapboxCoreNavigation now requires [MapboxDirections v2.10.0-rc.1](https://github.com/mapbox/mapbox-directions-swift/releases/tag/v2.10.0-rc.1). ([#4367](https://github.com/mapbox/mapbox-navigation-ios/pull/4367))
+* MapboxNavigation now requires [MapboxMaps v10.11.0](https://github.com/mapbox/mapbox-maps-ios/releases/tag/v10.11.0). ([#4367](https://github.com/mapbox/mapbox-navigation-ios/pull/4367))
+
+### Visual instructions
+* `MapboxRoadNameView` now renders localized road names. ([#4375](https://github.com/mapbox/mapbox-navigation-ios/pull/4375))
+* Added `localizedRoadNameKey` to the user info dictionary of `Notification.Name.passiveLocationManagerDidUpdate` posted by `PassiveLocationManager`, and the `Notification.Name.currentRoadNameDidChange` posted by `RouteController`. The corresponding string value contains localized road name. ([#4375](https://github.com/mapbox/mapbox-navigation-ios/pull/4375))
+
+### Camera
+
+* Fixes an issue where the camera padding was not calculated correctly when the map view didn't take the whole screen. ([#4350](https://github.com/mapbox/mapbox-navigation-ios/pull/4350))
+
+### CarPlay
+
+* Added `CarPlayManagerDelegate.carPlayManagerDidCancelPreview(_:)` to notify developers after CarPlay canceled routes preview, and `CarPlayManager.cancelRoutesPreview()` method to cancel routes preview on CarPlay. ([#4311](https://github.com/mapbox/mapbox-navigation-ios/pull/4311))
+* Added `CPRouteChoice.indexedRouteResponse` property to allow developers to get access to the `IndexedRouteResponse` of `CPRouteChoice` on CarPlay. ([#4311](https://github.com/mapbox/mapbox-navigation-ios/pull/4311))
+* Added the ability to pan a map view on CarPlay. ([#4288](https://github.com/mapbox/mapbox-navigation-ios/pull/4288))
+* Added a new configuration property `CarPlayManager.startFreeDriveAutomatically` that controls whether `CarPlayManager` starts a Free Drive session automatically on map load. If you set this property to false, you can start a Free Drive session using `CarPlayMapViewController.startFreeDriveNavigation()` method. ([#4352](https://github.com/mapbox/mapbox-navigation-ios/pull/4352))
+* Added new `CarPlayManagerDelegate` methods `carPlayManager(_:didBeginPanGesture:)`, `carPlayManager(_:didEndPanGesture:)`, `carPlayManager(_:didShowPanningInterface:)`, `carPlayManager(_:willDismissPanningInterface:)`, and `carPlayManager(_:didDismissPanningInterface:)` to notify about pan gesture events. ([#4368](https://github.com/mapbox/mapbox-navigation-ios/pull/4368))
+* Added `CarPlayManagerDelegate.carPlayManager(_:willPresent:)` method to allow developers to query or customize properties of the `CarPlayNavigationViewController` before it is presented. ([#4376](https://github.com/mapbox/mapbox-navigation-ios/pull/4376))
+
+### Electronic horizon
+
+**Note:** The Mapbox Electronic Horizon feature of the Mapbox Navigation SDK is in public beta and is subject to changes, including its pricing. Use of the feature is subject to the beta product restrictions in the Mapbox Terms of Service. Mapbox reserves the right to eliminate any free tier or free evaluation offers at any time and require customers to place an order to purchase the Mapbox Electronic Horizon feature, regardless of the level of use of the feature.
+
+* `RoadName` type changed from enum to struct with additional properties. ([#4333](https://github.com/mapbox/mapbox-navigation-ios/pull/4333))
+* Electronic Horizon Notifications (`Notification.Name.electronicHorizonDidUpdatePosition`, `Notification.Name.electronicHorizonDidEnterRoadObject`, `Notification.Name.electronicHorizonDidExitRoadObject`, `Notification.Name.electronicHorizonDidPassRoadObject`) are now called on the main thread. ([#4333](https://github.com/mapbox/mapbox-navigation-ios/pull/4333))
+* Added `RoadObjectKind.ic` and `RoadObjectKind.jct` for interchanges and junctions and the corresponding structs `Interchange` and `Junction`. ([#4367](https://github.com/mapbox/mapbox-navigation-ios/pull/4367))
+
+### Location tracking
+
+* Fixed a possible crash that could happen during route simulation. ([#4366](https://github.com/mapbox/mapbox-navigation-ios/pull/4366))
+
+### Other changes
+
+* Added log messages about trip session events. ([#4363](https://github.com/mapbox/mapbox-navigation-ios/pull/4363))
+* Fixed an issue where an incorrect upcoming intersection index cause a crash. ([#4314](https://github.com/mapbox/mapbox-navigation-ios/pull/4314))
+* Fixed an issue where `RouteProgress.currentLegProgress.currentStepProgress.userDistanceToUpcomingIntersection` could be incorrectly calculated for folding back route steps. ([#4268](https://github.com/mapbox/mapbox-navigation-ios/pull/4268))
+* Ensure map-matching considers HOV-only roads as auto accessible. ([#4333](https://github.com/mapbox/mapbox-navigation-ios/pull/4333))
+* Added `ReplayManagerHistoryEventsListener` to receive events feed when replaying a `History` data. ([#4342](https://github.com/mapbox/mapbox-navigation-ios/pull/4342))
+* `UserPushedHistoryEvent` is now public. ([#4342](https://github.com/mapbox/mapbox-navigation-ios/pull/4342))
+* Fixed `NavigationViewController` instantiation from the Storyboard. ([#4356](https://github.com/mapbox/mapbox-navigation-ios/pull/4356))
+* Fixed a possibly broken roundabout maneuver icon for extremely sharp turn. ([#4359](https://github.com/mapbox/mapbox-navigation-ios/pull/4359))
+* Fixed not working Speech generation if no navigation session started. ([#4362](https://github.com/mapbox/mapbox-navigation-ios/pull/4362))
+* Limited number of reported alternatives to 2, i.e. the `updatedAlternatives` parameter in `RouterDelegate.router(_:didUpdateAlternatives:removedAlternatives:)` has maximum size of 2. ([#4367](https://github.com/mapbox/mapbox-navigation-ios/pull/4367))
+* Increased terminal offboard route request timeout from 4 to 15 seconds. ([#4367](https://github.com/mapbox/mapbox-navigation-ios/pull/4367))
+* Sped up onboard routing cancellation. ([#4367](https://github.com/mapbox/mapbox-navigation-ios/pull/4367))
+* Fixed an issue when a rerouting could cause a memory leak. ([#4380](https://github.com/mapbox/mapbox-navigation-ios/pull/4380))
+
 ## v2.10.0
 
 ### Packaging
