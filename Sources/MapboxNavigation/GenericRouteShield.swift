@@ -16,6 +16,8 @@ public class GenericRouteShield: StylableView {
         }
     }
     
+    @objc public dynamic var highlightColor: UIColor?
+    
     //The label that contains the route code.
     lazy var routeLabel: UILabel = {
         let label: UILabel = .forAutoLayout()
@@ -79,7 +81,7 @@ public class GenericRouteShield: StylableView {
     }
 
     func buildConstraints() {
-        let height = heightAnchor.constraint(equalToConstant: pointSize * 1.2)
+        let height = heightAnchor.constraint(equalToConstant: pointSize * InstructionPresenter.labelShieldScaleFactor)
         
         let labelCenterY = routeLabel.centerYAnchor.constraint(equalTo: centerYAnchor)
         
@@ -94,34 +96,28 @@ public class GenericRouteShield: StylableView {
     /**
      This generates the cache key needed to hold the `GenericRouteShield`'s `imageRepresentation` in the `ImageCache` caching engine.
      */
-    static func criticalHash(styleID: String?, dataSource: DataSource, traitCollection: UITraitCollection) -> String {
+    static func criticalHash(styleID: String?, dataSource: DataSource, traitCollection: UITraitCollection, isHighlighted: Bool = false) -> String {
         var appearance = GenericRouteShield.appearance(for: UITraitCollection(userInterfaceIdiom: .phone))
         if traitCollection.userInterfaceIdiom == .carPlay {
-            if #available(iOS 12.0, *) {
-                let carPlayTraitCollection = UITraitCollection(traitsFrom: [
-                    UITraitCollection(userInterfaceIdiom: .carPlay),
-                    UITraitCollection(userInterfaceStyle: traitCollection.userInterfaceStyle)
-                ])
-                
-                appearance = GenericRouteShield.appearance(for: carPlayTraitCollection)
-            } else {
-                appearance = GenericRouteShield.appearance(for: UITraitCollection(userInterfaceIdiom: .carPlay))
-            }
+            let carPlayTraitCollection = UITraitCollection(traitsFrom: [
+                UITraitCollection(userInterfaceIdiom: .carPlay),
+                UITraitCollection(userInterfaceStyle: traitCollection.userInterfaceStyle)
+            ])
+            
+            appearance = GenericRouteShield.appearance(for: carPlayTraitCollection)
         }
         
         var criticalProperties: [AnyHashable?] = [
+            isHighlighted,
             dataSource.font.pointSize,
             appearance.backgroundColor,
             appearance.foregroundColor,
             appearance.borderColor,
             appearance.borderWidth,
             appearance.cornerRadius,
-            traitCollection.userInterfaceIdiom.rawValue
+            traitCollection.userInterfaceIdiom.rawValue,
+            traitCollection.userInterfaceStyle.rawValue
         ]
-        
-        if #available(iOS 12.0, *) {
-            criticalProperties.append(traitCollection.userInterfaceStyle.rawValue)
-        }
         
         if let styleID = styleID {
             criticalProperties.append(styleID)

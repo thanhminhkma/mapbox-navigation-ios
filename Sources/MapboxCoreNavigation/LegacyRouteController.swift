@@ -5,8 +5,8 @@ import Foundation
 import CoreLocation
 import MapboxDirections
 import Polyline
-import MapboxMobileEvents
 import Turf
+import UIKit
 
 @available(*, deprecated, renamed: "RouteController")
 open class LegacyRouteController: NSObject, Router, InternalRouter, CLLocationManagerDelegate {
@@ -220,7 +220,7 @@ open class LegacyRouteController: NSObject, Router, InternalRouter, CLLocationMa
         return false
     }
     
-    @available(*, deprecated, renamed: "init(alongRouteAtIndex:routeIndex:in:options:customRoutingProvider:dataSource:)")
+    @available(*, deprecated, renamed: "init(with:customRoutingProvider:dataSource:)")
     public convenience init(alongRouteAtIndex routeIndex: Int,
                             in routeResponse: RouteResponse,
                             options: RouteOptions,
@@ -233,7 +233,7 @@ open class LegacyRouteController: NSObject, Router, InternalRouter, CLLocationMa
                   dataSource: source)
     }
     
-    @available(*, deprecated, renamed: "init(alongRouteAtIndex:routeIndex:in:options:customRoutingProvider:dataSource:)")
+    @available(*, deprecated, renamed: "init(with:customRoutingProvider:dataSource:)")
     required public convenience init(alongRouteAtIndex routeIndex: Int,
                                      in routeResponse: RouteResponse,
                                      options: RouteOptions,
@@ -246,21 +246,32 @@ open class LegacyRouteController: NSObject, Router, InternalRouter, CLLocationMa
                   dataSource: source)
     }
     
-    required public init(alongRouteAtIndex routeIndex: Int,
-                         in routeResponse: RouteResponse,
-                         options: RouteOptions,
-                         customRoutingProvider: RoutingProvider? = nil,
+    @available(*, deprecated, renamed: "init(indexedRouteResponse:customRoutingProvider:dataSource:)")
+    required public convenience init(alongRouteAtIndex routeIndex: Int,
+                                     in routeResponse: RouteResponse,
+                                     options: RouteOptions,
+                                     customRoutingProvider: RoutingProvider? = nil,
+                                     dataSource source: RouterDataSource) {
+        self.init(indexedRouteResponse: .init(routeResponse: routeResponse,
+                                              routeIndex: routeIndex),
+                  customRoutingProvider: customRoutingProvider,
+                  dataSource: source)
+    }
+    
+    required public init(indexedRouteResponse: IndexedRouteResponse,
+                         customRoutingProvider: RoutingProvider?,
                          dataSource source: RouterDataSource) {
         self.customRoutingProvider = customRoutingProvider
-        self.indexedRouteResponse = .init(routeResponse: routeResponse, routeIndex: routeIndex)
-        self.routeProgress = RouteProgress(route: routeResponse.routes![routeIndex], options: options)
+        self.indexedRouteResponse = indexedRouteResponse
+        let options = indexedRouteResponse.validatedRouteOptions
+        self.routeProgress = RouteProgress(route: indexedRouteResponse.currentRoute!, options: options)
         self.dataSource = source
         self.refreshesRoute = options.profileIdentifier == .automobileAvoidingTraffic && options.refreshingEnabled
         UIDevice.current.isBatteryMonitoringEnabled = true
         
         super.init()
         BillingHandler.shared.beginBillingSession(for: .activeGuidance, uuid: sessionUUID)
-        checkForUpdates()
+        Bundle.checkForNavigationSDKUpdates()
         checkForLocationUsageDescription()
     }
 
@@ -270,25 +281,6 @@ open class LegacyRouteController: NSObject, Router, InternalRouter, CLLocationMa
         if let del = delegate, del.routerShouldDisableBatteryMonitoring(self) {
             UIDevice.current.isBatteryMonitoringEnabled = false
         }
-    }
-
-    private func checkForUpdates() {
-        #if TARGET_IPHONE_SIMULATOR
-        guard (NSClassFromString("XCTestCase") == nil) else { return } // Short-circuit when running unit tests
-        guard let version = Bundle.string(forMapboxCoreNavigationInfoDictionaryKey: "CFBundleShortVersionString") else { return }
-            let latestVersion = String(describing: version)
-            _ = URLSession.shared.dataTask(with: URL(string: "https://docs.mapbox.com/ios/navigation/latest_version.txt")!, completionHandler: { (data, response, error) in
-                if let _ = error { return }
-                guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else { return }
-
-                guard let data = data, let currentVersion = String(data: data, encoding: .utf8)?.trimmingCharacters(in: .newlines) else { return }
-
-                if latestVersion != currentVersion {
-                    let updateString = NSLocalizedString("UPDATE_AVAILABLE", bundle: .mapboxCoreNavigation, value: "Mapbox Navigation SDK for iOS version %@ is now available.", comment: "Inform developer an update is available")
-                    Log.warning(String.localizedStringWithFormat(updateString, latestVersion), "https://github.com/mapbox/mapbox-navigation-ios/releases/tag/v\(latestVersion)", category: .settings)
-                }
-            }).resume()
-        #endif
     }
 
     private func checkForLocationUsageDescription() {
@@ -497,7 +489,7 @@ open class LegacyRouteController: NSObject, Router, InternalRouter, CLLocationMa
 
         self.lastRerouteLocation = location
 
-        calculateRoutes(from: location, along: progress) { [weak self] (session, result) in
+        calculateRoutes(from: location, along: progress) { [weak self] (result) in
             guard let self = self else { return }
             
             switch result {

@@ -83,6 +83,13 @@ extension Bundle {
             #endif
         }
     }
+
+    /**
+     Indicates whether the application depends on MapboxNavigation in addition to MapboxCoreNavigation.
+     */
+    class var usesDefaultUserInterface: Bool {
+        return mapboxNavigationIfInstalled != nil
+    }
     
     /**
      Returns a dictionary of `MBXInfo.plist` in Mapbox Core Navigation.
@@ -106,12 +113,10 @@ extension Bundle {
      Returns the value associated with the specific key in the Mapbox Navigation bundle's information property list, if installed.
      */
     public class func string(forMapboxNavigationInfoDictionaryKey key: String) -> String? {
-        if let stringForKey = Bundle.mapboxNavigationIfInstalled?.object(forInfoDictionaryKey: key) {
-            return stringForKey as? String
-        } else if let infoDictionary = Bundle.mapboxNavigationInfoDictionary {
+        if let infoDictionary = Bundle.mapboxNavigationInfoDictionary {
             return infoDictionary[key] as? String
         } else {
-            return nil
+            return Bundle.mapboxNavigationIfInstalled?.object(forInfoDictionaryKey: key) as? String
         }
     }
     
@@ -119,12 +124,10 @@ extension Bundle {
      Returns the value associated with the specific key in the Mapbox Core Navigation bundle's information property list.
      */
     public class func string(forMapboxCoreNavigationInfoDictionaryKey key: String) -> String? {
-        if let stringForKey = Bundle.mapboxCoreNavigation.object(forInfoDictionaryKey: key) {
-            return stringForKey as? String
-        } else if let infoDictionary = Bundle.mapboxCoreNavigationInfoDictionary {
+        if let infoDictionary = Bundle.mapboxCoreNavigationInfoDictionary {
             return infoDictionary[key] as? String
         } else {
-            return nil
+            return Bundle.mapboxCoreNavigation.object(forInfoDictionaryKey: key) as? String
         }
     }
 }

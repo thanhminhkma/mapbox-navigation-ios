@@ -2,7 +2,39 @@ import MapboxNavigationNative
 import MapboxDirections
 @_implementationOnly import MapboxCommon_Private
 
-class Navigator {
+protocol CoreNavigator {
+    static var shared: Self { get }
+
+    static var isSharedInstanceCreated: Bool { get }
+    static var datasetProfileIdentifier: ProfileIdentifier { get set }
+
+    var navigator: MapboxNavigationNative.Navigator { get }
+    var mostRecentNavigationStatus: NavigationStatus? { get }
+    var tileStore: TileStore { get }
+    var roadGraph: RoadGraph { get }
+    var roadObjectStore: RoadObjectStore { get }
+    var roadObjectMatcher: RoadObjectMatcher { get }
+    var rerouteController: RerouteController { get }
+
+    func startUpdatingElectronicHorizon(with options: ElectronicHorizonOptions?)
+    func stopUpdatingElectronicHorizon()
+
+    func setRoutes(_ routesData: RoutesData,
+                   uuid: UUID,
+                   legIndex: UInt32,
+                   completion: @escaping (Result<RoutesCoordinator.RoutesResult, Error>) -> Void)
+    func setAlternativeRoutes(with routes: [RouteInterface],
+                              completion: @escaping (Result<[RouteAlternative], Error>) -> Void)
+    func unsetRoutes(uuid: UUID,
+                     completion: @escaping (Result<RoutesCoordinator.RoutesResult, Error>) -> Void)
+
+    func updateLocation(_ location: CLLocation, completion: @escaping (Bool) -> Void)
+
+    func resume()
+    func pause()
+}
+
+final class Navigator: CoreNavigator {
     /**
      Tiles version string. If not specified explicitly - will be automatically resolved
      to the latest version.
@@ -30,19 +62,18 @@ class Navigator {
     }
 
     private lazy var routeCoordinator: RoutesCoordinator = {
-        .init(routesSetupHandler: { [weak self] route, legIndex, alternativeRoutes, completion in
-            var routesParams: SetRoutesParams? = nil
-            if let route = route {
-                routesParams = SetRoutesParams(primaryRoute: route,
-                                               legIndex: legIndex,
-                                               alternativeRoutes: alternativeRoutes)
-            }
+        .init(routesSetupHandler: { [weak self] routesData, legIndex, completion in
             
-            self?.navigator.setRoutesFor(routesParams) { [weak self] result in
+            let dataParams = routesData.map { SetRoutesDataParams(routes: $0,
+                                                                  legIndex: legIndex) }
+            
+            let reason: SetRoutesReason = routesData != nil ? .newRoute : .cleanUp
+            self?.navigator.setRoutesDataFor(dataParams,
+                                             reason: reason) { [weak self] result in
                 if result.isValue(),
                    let routesResult = result.value {
                     Log.info("Navigator has been updated, including \(routesResult.alternatives.count) alternatives.", category: .navigation)
-                    completion(.success((route?.getRouteInfo(), routesResult.alternatives)))
+                    completion(.success((routesData?.primaryRoute().getRouteInfo(), routesResult.alternatives)))
                 }
                 else if result.isError() {
                     let reason = (result.error as String?) ?? ""
@@ -92,8 +123,6 @@ class Navigator {
     }
     
     private static weak var _navigator: Navigator?
-    // Used in tests to recreate the navigator
-    static func _recreateNavigator() { _navigator = nil }
     
     /**
      Profile setting, used for selecting tiles type for navigation.
@@ -206,6 +235,7 @@ class Navigator {
     
     private func unsubscribeNavigator() {
         stopUpdatingElectronicHorizon()
+        rerouteController.invalidate()
         if let navigatorStatusObserver = navigatorStatusObserver {
             navigator.removeObserver(for: navigatorStatusObserver)
         }
@@ -252,8 +282,8 @@ class Navigator {
 
     // MARK: - Navigator Updates
 
-    func setRoutes(_ route: RouteInterface, uuid: UUID, legIndex: UInt32, alternativeRoutes: [RouteInterface], completion: @escaping (Result<RoutesCoordinator.RoutesResult, Error>) -> Void) {
-        routeCoordinator.beginActiveNavigation(with: route, uuid: uuid, legIndex: legIndex, alternativeRoutes: alternativeRoutes, completion: completion)
+    func setRoutes(_ routesData: RoutesData, uuid: UUID, legIndex: UInt32, completion: @escaping (Result<RoutesCoordinator.RoutesResult, Error>) -> Void) {
+        routeCoordinator.beginActiveNavigation(with: routesData, uuid: uuid, legIndex: legIndex, completion: completion)
     }
     
     func setAlternativeRoutes(with routes: [RouteInterface], completion: @escaping (Result<[RouteAlternative], Error>) -> Void) {
@@ -349,7 +379,9 @@ class NavigatorElectronicHorizonObserver: ElectronicHorizonObserver {
             .updatesMostProbablePathKey: position.type() == .update,
             .distancesByRoadObjectKey: distances.map(DistancedRoadObject.init),
         ]
-        NotificationCenter.default.post(name: .electronicHorizonDidUpdatePosition, object: nil, userInfo: userInfo)
+        onMainAsync {
+            NotificationCenter.default.post(name: .electronicHorizonDidUpdatePosition, object: nil, userInfo: userInfo)
+        }
     }
     
     public func onRoadObjectEnter(for info: RoadObjectEnterExitInfo) {
@@ -357,7 +389,9 @@ class NavigatorElectronicHorizonObserver: ElectronicHorizonObserver {
             .roadObjectIdentifierKey: info.roadObjectId,
             .didTransitionAtEndpointKey: info.isEnterFromStartOrExitFromEnd,
         ]
-        NotificationCenter.default.post(name: .electronicHorizonDidEnterRoadObject, object: nil, userInfo: userInfo)
+        onMainAsync {
+            NotificationCenter.default.post(name: .electronicHorizonDidEnterRoadObject, object: nil, userInfo: userInfo)
+        }
     }
     
     public func onRoadObjectExit(for info: RoadObjectEnterExitInfo) {
@@ -365,14 +399,18 @@ class NavigatorElectronicHorizonObserver: ElectronicHorizonObserver {
             .roadObjectIdentifierKey: info.roadObjectId,
             .didTransitionAtEndpointKey: info.isEnterFromStartOrExitFromEnd,
         ]
-        NotificationCenter.default.post(name: .electronicHorizonDidExitRoadObject, object: nil, userInfo: userInfo)
+        onMainAsync {
+            NotificationCenter.default.post(name: .electronicHorizonDidExitRoadObject, object: nil, userInfo: userInfo)
+        }
     }
 
     public func onRoadObjectPassed(for info: RoadObjectPassInfo) {
         let userInfo: [RoadGraph.NotificationUserInfoKey: Any] = [
             .roadObjectIdentifierKey: info.roadObjectId,
         ]
-        NotificationCenter.default.post(name: .electronicHorizonDidPassRoadObject, object: nil, userInfo: userInfo)
+        onMainAsync {
+            NotificationCenter.default.post(name: .electronicHorizonDidPassRoadObject, object: nil, userInfo: userInfo)
+        }
     }
 }
 
@@ -410,7 +448,10 @@ class NavigatorRouteAlternativesObserver: RouteAlternativesObserver {
     }
     
     func onOnlinePrimaryRouteAvailable(forOnlinePrimaryRoute onlinePrimaryRoute: RouteInterface) {
-        // TODO: support switching to online route
+        let userInfo: [Navigator.NotificationUserInfoKey: Any] = [
+            .coincideOnlineRouteKey: onlinePrimaryRoute,
+        ]
+        NotificationCenter.default.post(name: .navigatorWantsSwitchToCoincideOnlineRoute, object: nil, userInfo: userInfo)
     }
 }
 

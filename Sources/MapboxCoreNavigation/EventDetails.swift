@@ -4,7 +4,6 @@ import Polyline
 import UIKit
 import AVFoundation
 import MapboxDirections
-import MapboxMobileEvents
 
 protocol EventDetails: Encodable {
     var event: String? { get set }
@@ -96,14 +95,11 @@ extension GlobalEventDetails {
     }
     var batteryLevel: Int { UIDevice.current.batteryLevel >= 0 ? Int(UIDevice.current.batteryLevel * 100) : -1 }
     var batteryPluggedIn: Bool { [.charging, .full].contains(UIDevice.current.batteryState) }
-    var device: String { UIDevice.current.machine }
+    var device: String { UIDeviceCache.machine }
     var operatingSystem: String { "\(ProcessInfo.systemName) \(ProcessInfo.systemVersion)" }
     var platform: String { ProcessInfo.systemName }
     var sdkVersion: String {
-        guard let stringForShortVersion = Bundle.string(forMapboxCoreNavigationInfoDictionaryKey: "CFBundleShortVersionString") else {
-            preconditionFailure("CFBundleShortVersionString must be set in the Info.plist.")
-        }
-        return stringForShortVersion
+        return Bundle.navigationSDKVersion
     }
     var screenBrightness: Int { Int(UIScreen.main.brightness * 100) }
     var volumeLevel: Int { Int(AVAudioSession.sharedInstance().outputVolume * 100) }
@@ -175,4 +171,16 @@ extension AVAudioSession {
         }
         return "unknown"
     }
+}
+
+enum UIDeviceCache {
+    static let machine: String = {
+        var systemInfo = utsname()
+        uname(&systemInfo)
+        let machineMirror = Mirror(reflecting: systemInfo.machine)
+        return machineMirror.children.reduce("") { (identifier: String, element: Mirror.Child) in
+            guard let value = element.value as? Int8, value != 0 else { return identifier }
+            return identifier + String(UnicodeScalar(UInt8(value)))
+        }
+    }()
 }

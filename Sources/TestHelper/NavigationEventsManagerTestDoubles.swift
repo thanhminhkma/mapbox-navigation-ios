@@ -1,57 +1,57 @@
 import Foundation
-import MapboxMobileEvents
 @testable import MapboxCoreNavigation
-import MapboxDirections
 #if SWIFT_PACKAGE
 import CTestHelper
 #endif
 
+public class PassiveNavigationDataSourceSpy: PassiveNavigationEventsManagerDataSource {
+    public var rawLocation: CLLocation? = nil
+    public var locationManagerType: MapboxCoreNavigation.NavigationLocationManager.Type = NavigationLocationManagerSpy.self
+}
+
 public class NavigationEventsManagerSpy: NavigationEventsManager {
-    var mobileEventsManagerSpy: MMEEventsManagerSpy!
-    
-    var _enqueuedEvents: [FakeTelemetryEvent] {
-        return mobileEventsManagerSpy.enqueuedEvents
-    }
-    
-    var _flushedEvents: [FakeTelemetryEvent] {
-        return mobileEventsManagerSpy.flushedEvents
-    }
+    private let eventsAPIMock: EventsAPIMock
+    private let passiveNavigationDataSource: PassiveNavigationDataSourceSpy
     
     var debuggableEvents = [NavigationEventDetails]()
+    var locations = [CLLocation]()
+    var totalDistanceCompleted: CLLocationDistance = 0
+
+    var arriveAtWaypointCalled = false
+    var arriveAtDestinationCalled = false
+    var enqueueRerouteEventCalled = false
 
     required public init() {
-        mobileEventsManagerSpy = MMEEventsManagerSpy.testableInstance()
-        super.init(activeNavigationDataSource: nil, accessToken: "fake token", mobileEventsManager: mobileEventsManagerSpy)
+        eventsAPIMock = EventsAPIMock()
+        passiveNavigationDataSource = PassiveNavigationDataSourceSpy()
+        super.init(activeNavigationDataSource: nil,
+                   passiveNavigationDataSource: passiveNavigationDataSource,
+                   accessToken: "fake token",
+                   eventsAPI: eventsAPIMock)
     }
-    
-    required convenience init(activeNavigationDataSource: ActiveNavigationEventsManagerDataSource? = nil,
-                  passiveNavigationDataSource: PassiveNavigationEventsManagerDataSource? = nil,
-                  accessToken possibleToken: String? = nil,
-                  mobileEventsManager: MMEEventsManager = .shared()) {
+
+    required convenience init(activeNavigationDataSource: ActiveNavigationEventsManagerDataSource? = nil, passiveNavigationDataSource: PassiveNavigationEventsManagerDataSource? = nil, accessToken possibleToken: String? = nil) {
         self.init()
     }
 
     func reset() {
-        mobileEventsManagerSpy.reset()
+        eventsAPIMock.reset()
+        locations.removeAll()
     }
 
-    func hasFlushedEvent(with eventName: String) -> Bool {
-        return mobileEventsManagerSpy.hasFlushedEvent(with: eventName)
+    func hasImmediateEvent(with eventName: String) -> Bool {
+        return eventsAPIMock.hasImmediateEvent(with: eventName)
     }
 
-    func hasEnqueuedEvent(with eventName: String) -> Bool {
-        return mobileEventsManagerSpy.hasEnqueuedEvent(with: eventName)
+    func immediateEventCount(with eventName: String) -> Int {
+        return eventsAPIMock.immediateEventCount(with: eventName)
     }
 
-    func enqueuedEventCount(with eventName: String) -> Int {
-        return mobileEventsManagerSpy.enqueuedEventCount(with: eventName)
+    func hasQueuedEvent(with eventName: String) -> Bool {
+        return eventsAPIMock.hasQueuedEvent(with: eventName)
     }
 
-    func flushedEventCount(with eventName: String) -> Int {
-        return mobileEventsManagerSpy.flushedEventCount(with: eventName)
-    }
-    
-    override public func navigationDepartEvent() -> ActiveNavigationEventDetails? {
+    public override func navigationDepartEvent() -> ActiveNavigationEventDetails? {
         if let event = super.navigationDepartEvent() {
             debuggableEvents.append(event)
             return event
@@ -59,7 +59,7 @@ public class NavigationEventsManagerSpy: NavigationEventsManager {
         return nil
     }
     
-    override public func navigationArriveEvent() -> ActiveNavigationEventDetails? {
+    public override func navigationArriveEvent() -> ActiveNavigationEventDetails? {
         if let event = super.navigationArriveEvent() {
             debuggableEvents.append(event)
             return event
@@ -67,7 +67,7 @@ public class NavigationEventsManagerSpy: NavigationEventsManager {
         return nil
     }
     
-    override public func navigationRerouteEvent(
+    public override func navigationRerouteEvent(
         eventType: String = MMEEventTypeNavigationReroute
     ) -> ActiveNavigationEventDetails? {
         if let event = super.navigationRerouteEvent() {
@@ -77,87 +77,31 @@ public class NavigationEventsManagerSpy: NavigationEventsManager {
         return nil
     }
     
-    override public func createFeedback(screenshotOption: FeedbackScreenshotOption = .automatic) -> FeedbackEvent? {
+    public override func createFeedback(screenshotOption: FeedbackScreenshotOption = .automatic) -> FeedbackEvent? {
         let sessionState = SessionState(currentRoute: nil, originalRoute: nil, routeIdentifier: nil)
         var event = PassiveNavigationEventDetails(dataSource: PassiveLocationManager(), sessionState: sessionState)
         event.userIdentifier = UIDevice.current.identifierForVendor?.uuidString
         event.event = MMEEventTypeNavigationFeedback
         return FeedbackEvent(eventDetails: event)
     }
-}
 
-typealias FakeTelemetryEvent = (name: String, attributes: [String: Any])
-
-class MMEEventsManagerSpy: MMEEventsManager {
-    var enqueuedEvents = [FakeTelemetryEvent]()
-    var flushedEvents = [FakeTelemetryEvent]()
-
-    public func reset() {
-        enqueuedEvents.removeAll()
-        flushedEvents.removeAll()
+    public override func record(_ locations: [CLLocation]) {
+        self.locations.append(contentsOf: locations)
     }
 
-    override func enqueueEvent(withName name: String) {
-        self.enqueueEvent(withName: name, attributes: [:])
+    public override func incrementDistanceTraveled(by distance: CLLocationDistance) {
+        totalDistanceCompleted += distance
     }
 
-    override func enqueueEvent(withName name: String, attributes: [String: Any] = [:]) {
-        let event: FakeTelemetryEvent = FakeTelemetryEvent(name: name, attributes: attributes)
-        enqueuedEvents.append(event)
+    public override func arriveAtWaypoint() {
+        arriveAtWaypointCalled = true
     }
 
-    override func sendTurnstileEvent() {
-        flushedEvents.append((name: "???", attributes: ["event": MMEEventTypeAppUserTurnstile, "eventsManager": String(describing: self)]))
+    public override func arriveAtDestination() {
+        arriveAtDestinationCalled = true
     }
 
-    override func flush() {
-        enqueuedEvents.forEach { (event: FakeTelemetryEvent) in
-            flushedEvents.append(event)
-        }
-        enqueuedEvents.removeAll()
-    }
-
-    public func hasFlushedEvent(with name: String) -> Bool {
-        guard !flushedEvents.contains(where: { $0.name == name }) else {
-            return true
-        }
-
-        return flushedEvents.contains(where: { (event) -> Bool in
-            return event.attributes["event"] as! String == name
-        })
-    }
-
-    public func hasEnqueuedEvent(with name: String) -> Bool {
-        guard !enqueuedEvents.contains(where: { $0.name == name }) else {
-            return true
-        }
-
-        return enqueuedEvents.contains(where: { (event) -> Bool in
-            return event.attributes["event"] as! String == name
-        })
-    }
-
-    public func enqueuedEventCount(with name: String) -> Int {
-        if enqueuedEvents.contains(where: { $0.name == name }) {
-            return enqueuedEvents.filter { (event) in
-                return event.name == name
-            }.count
-        }
-
-        return enqueuedEvents.filter { (event) in
-            return event.attributes["event"] as! String == name
-        }.count
-    }
-
-    public func flushedEventCount(with name: String) -> Int {
-        if flushedEvents.contains(where: { $0.name == name }) {
-            return flushedEvents.filter { (event) in
-                return event.name == name
-            }.count
-        }
-
-        return flushedEvents.filter { (event) in
-            return event.attributes["event"] as! String == name
-        }.count
+    public override func enqueueRerouteEvent() {
+        enqueueRerouteEventCalled = true
     }
 }

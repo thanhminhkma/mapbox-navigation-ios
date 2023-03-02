@@ -4,7 +4,7 @@ title: "Navigation SDK for iOS"
 author_url: https://docs.mapbox.com/ios/navigation/
 github_url: https://github.com/mapbox/mapbox-navigation-ios
 dash_url: https://docs.mapbox.com/ios/docsets/MapboxNavigation.xml
-copyright: '© 2014–2022 [Mapbox](https://www.mapbox.com/). See [license](https://github.com/mapbox/mapbox-navigation-ios/blob/main/LICENSE.md) for more details.'
+copyright: '© 2014–2023 [Mapbox](https://www.mapbox.com/). See [license](https://github.com/mapbox/mapbox-navigation-ios/blob/main/LICENSE.md) for more details.'
 
 head: |
   <link rel='shortcut icon' href='https://www.mapbox.com/img/favicon.ico' type='image/x-icon' />
@@ -54,11 +54,13 @@ custom_categories:
       - ReplayLocationManager
       - SimulatedLocationManager
       - NavigationRouteOptions
-      - RouteOptions
+      - DirectionsOptions
       - NavigationMatchOptions
       - SimulationMode
+      - SimulationIntent
+      - SimulationState
       - PassiveLocationManager
-      - HistoryRecording
+      - PassiveLocationManagerDelegate
   - name: Maps
     children:
       - NavigationMapView
@@ -81,16 +83,19 @@ custom_categories:
       - DistanceFormatter
   - name: UI Components
     children:
-      - BottomBannerViewController
-      - BottomBannerViewControllerDelegate
       - SpeedLimitView
       - UserPuckCourseView
       - UserHaloCourseView
+      - UserCourseView
       - CourseUpdatable
       - NavigationComponent
+      - FloatingButton
+      - WayNameLabel
+      - WayNameView
   - name: Guidance Instruction UI
     children:
       - TopBannerViewController
+      - TopBannerViewControllerDelegate
       - InstructionsCardViewController
       - InstructionsCardContainerView
       - InstructionsCardContainerViewDelegate
@@ -100,6 +105,9 @@ custom_categories:
       - ManeuverView
       - JunctionView
       - GenericRouteShield
+      - StepsViewControllerDelegate
+      - BottomBannerViewController
+      - BottomBannerViewControllerDelegate
   - name: CarPlay
     children:
       - CarPlayManager
@@ -115,6 +123,7 @@ custom_categories:
       - CarPlayConnectionObserver
       - RecentItem
       - NavigationGeocodedPlacemark
+      - CarPlayUserInfo
   - name: Configuration
     children:
       - RouteControllerDeadReckoningTimeInterval
@@ -159,6 +168,12 @@ custom_categories:
       - RoadClosureSubtype
       - FeedbackSource
       - EndOfRouteFeedback
+      - FeedbackEvent
+      - FeedbackScreenshotOption
+      - FeedbackType
+      - PassiveNavigationRoadIssueSubtype
+      - PassiveNavigationWrongTrafficSubtype
+      - LooksIncorrectSubtype
   - name: Camera
     children:
       - NavigationCamera
@@ -170,6 +185,31 @@ custom_categories:
       - NavigationViewportDataSource
       - ViewportDataSourceType
       - ViewportDataSourceDelegate
+      - FollowingCameraOptions
+      - IntersectionDensity
+      - BearingSmoothing
+      - GeometryFramingAfterManeuver
+      - PitchNearManeuver
+      - OverviewCameraOptions
+      - NavigationViewportDataSourceOptions
+      - CameraOptions
+  - name: Preview
+    children:
+      - PreviewOptions
+      - PreviewViewController
+      - PreviewViewControllerDelegate
+      - Banner
+      - BannerConfiguration
+      - BannerDismissalViewController
+      - BannerDismissalViewControllerDelegate
+      - DestinationPreviewViewController
+      - DestinationPreviewViewControllerDelegate
+      - DestinationOptions
+      - DestinationDataSource
+      - RoutePreviewViewController
+      - RoutePreviewViewControllerDelegate
+      - RoutePreviewOptions
+      - RoutePreviewDataSource
   - name: Electronic Horizon
     children:
       - ElectronicHorizonOptions
@@ -184,3 +224,13 @@ custom_categories:
       - RoadObjectMatcherDelegate
       - RoadObjectStoreDelegate
       - RoadObjectMatcherError
+      - OpenLRSideOfRoad
+  - name: Reading History
+    children:
+      - HistoryReader
+      - HistoryEvent
+      - UnknownHistoryEvent
+      - RouteAssignmentHistoryEvent
+      - LocationUpdateHistoryEvent
+      - History
+      - HistoryRecording

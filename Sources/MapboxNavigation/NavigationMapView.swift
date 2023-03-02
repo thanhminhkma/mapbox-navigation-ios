@@ -195,6 +195,8 @@ open class NavigationMapView: UIView {
      route.
      - parameter routesPresentationStyle: Route lines presentation style. By default the map will be
      updated to fit all routes.
+     - parameter legIndex: The zero-based index of the currently active leg along the active route.
+     The active leg is highlighted more prominently than inactive legs.
      - parameter animated: `true` to asynchronously animate the camera, or `false` to instantaneously
      zoom and pan the map.
      - parameter duration: Duration of the animation (in seconds). In case if `animated` parameter
@@ -203,6 +205,7 @@ open class NavigationMapView: UIView {
      */
     public func showcase(_ routes: [Route],
                          routesPresentationStyle: RoutesPresentationStyle = .all(),
+                         legIndex: Int? = nil,
                          animated: Bool = false,
                          duration: TimeInterval = 1.0,
                          completion: AnimationCompletionHandler? = nil) {
@@ -217,9 +220,65 @@ open class NavigationMapView: UIView {
         
         switch routesPresentationStyle {
         case .single:
-            show([activeRoute], layerPosition: customRouteLineLayerPosition)
+            show([activeRoute], layerPosition: customRouteLineLayerPosition, legIndex: legIndex)
         case .all:
-            show(routes, layerPosition: customRouteLineLayerPosition)
+            show(routes, layerPosition: customRouteLineLayerPosition, legIndex: legIndex)
+        }
+        
+        showWaypoints(on: activeRoute)
+        
+        navigationCamera.stop()
+        fitCamera(to: routes,
+                  routesPresentationStyle: routesPresentationStyle,
+                  animated: animated,
+                  duration: duration,
+                  completion: completion)
+    }
+    
+    /**
+     Visualizes the given routes and it's alternatives, removing any existing from the map.
+     
+     Each route is visualized as a line. Each line is color-coded by traffic congestion, if congestion
+     levels are present and `NavigationMapView.crossfadesCongestionSegments` is set to `true`.
+     
+     Waypoints along the route are visualized as markers. Implement `NavigationMapViewDelegate` methods
+     to customize the appearance of the lines and markers representing the routes and waypoints.
+     
+     To only visualize the routes and not the waypoints, or to have more control over the camera,
+     use the `show(_:legIndex:)` method.
+     
+     - parameter routeResponse: `IndexedRouteResponse` containing routes to visualize. The selected route by `routeIndex` is considered primary, while the remaining routes are displayed as if they are currently deselected or inactive.
+     - parameter routesPresentationStyle: Route lines presentation style. By default the map will be
+     updated to fit all routes.
+     - parameter legIndex: The zero-based index of the currently active leg along the active route.
+     The active leg is highlighted more prominently than inactive legs.
+     - parameter animated: `true` to asynchronously animate the camera, or `false` to instantaneously
+     zoom and pan the map.
+     - parameter duration: Duration of the animation (in seconds). In case if `animated` parameter
+     is set to `false` this value is ignored.
+     - parameter completion: A completion handler that will be called once routes presentation completes.
+     */
+    public func showcase(_ routeResponse: IndexedRouteResponse,
+                         routesPresentationStyle: RoutesPresentationStyle = .all(),
+                         legIndex: Int? = nil,
+                         animated: Bool = false,
+                         duration: TimeInterval = 1.0,
+                         completion: AnimationCompletionHandler? = nil) {
+        guard let routes = routeResponse.routeResponse.routes,
+              let activeRoute = routeResponse.currentRoute,
+              let coordinates = activeRoute.shape?.coordinates,
+              !coordinates.isEmpty else { return }
+        
+        removeArrow()
+        removeRoutes()
+        removeWaypoints()
+        removeContinuousAlternativesRoutes()
+        
+        switch routesPresentationStyle {
+        case .single:
+            show([activeRoute], layerPosition: customRouteLineLayerPosition, legIndex: legIndex)
+        case .all:
+            show(routeResponse, layerPosition: customRouteLineLayerPosition, legIndex: legIndex)
         }
         
         showWaypoints(on: activeRoute)
@@ -266,6 +325,41 @@ open class NavigationMapView: UIView {
         applyRoutesDisplay(layerPosition: layerPosition)
     }
     
+    /**
+     Visualizes the given routes and it's alternatives, removing any existing from the map.
+     
+     Each route is visualized as a line. Each line is color-coded by traffic congestion, if congestion
+     levels are present. Implement `NavigationMapViewDelegate` methods to customize the appearance of
+     the lines representing the routes. To also visualize waypoints and zoom the map to fit,
+     use the `showcase(_:animated:)` method.
+     
+     To undo the effects of this method, use `removeRoutes()` and `removeContinuousAlternativesRoutes()` methods.
+     
+     - parameter routeResponse: `IndexedRouteResponse` containing routes to visualize. The selected route by `routeIndex` is considered primary, while the remaining routes are displayed as if they are currently deselected or inactive.
+     - parameter layerPosition: Position of the first route layer. Remaining routes and their casings
+     are always displayed below the first and all other subsequent route layers. Defaults to `nil`.
+     If layer position is set to `nil`, the route layer appears below the bottommost symbol layer.
+     - parameter legIndex: The zero-based index of the currently active leg along the primary route.
+     The active leg is highlighted more prominently than inactive legs.
+     */
+    public func show(_ routeResponse: IndexedRouteResponse,
+                     layerPosition: MapboxMaps.LayerPosition? = nil,
+                     legIndex: Int? = nil) {
+        guard let mainRoute = routeResponse.currentRoute else {
+            return
+        }
+        
+        removeRoutes()
+        removeContinuousAlternativesRoutesLayers()
+        
+        self.routes = [mainRoute]
+        self.continuousAlternatives = routeResponse.parseAlternativeRoutes()
+        currentLegIndex = legIndex
+        customRouteLineLayerPosition = layerPosition
+        
+        applyRoutesDisplay(layerPosition: layerPosition)
+    }
+    
     func applyRoutesDisplay(layerPosition: MapboxMaps.LayerPosition? = nil) {
         var parentLayerIdentifier: String? = nil
         guard let routes = routes else { return }
@@ -303,12 +397,14 @@ open class NavigationMapView: UIView {
             }
         }
         
-        continuousAlternatives?.forEach { routeAlternative in
-            guard let route = routeAlternative.indexedRouteResponse.currentRoute else {
+        guard let continuousAlternatives = continuousAlternatives else { return }
+        for (index, routeAlternative) in continuousAlternatives.enumerated() {
+            guard let route = routeAlternative.indexedRouteResponse.currentRoute,
+                  alternativesRouteLineDeviationOffsets?.count ?? 0 > index,
+                  let offset = alternativesRouteLineDeviationOffsets?[index] else {
                 return
             }
             
-            let offset = (route.distance - routeAlternative.infoFromDeviationPoint.distance) / route.distance
             parentLayerIdentifier = addRouteLayer(route,
                                                   below: parentLayerIdentifier,
                                                   isMainRoute: false,
@@ -398,7 +494,7 @@ open class NavigationMapView: UIView {
                                                            zoom: mapView.cameraState.zoom)
             
             // TODO: Implement ability to change `shaftLength` depending on zoom level.
-            let shaftLength = max(min(30 * metersPerPoint, 30), 10)
+            let shaftLength = max(min(50 * metersPerPoint, 50), 30)
             let shaftPolyline = route.polylineAroundManeuver(legIndex: legIndex, stepIndex: stepIndex, distance: shaftLength)
             
             if shaftPolyline.coordinates.count > 1 {
@@ -422,6 +518,7 @@ open class NavigationMapView: UIView {
                     
                     try mapView.mapboxMap.style.addSource(arrowSource, id: NavigationMapView.SourceIdentifier.arrowSource)
                     arrowLayer.source = NavigationMapView.SourceIdentifier.arrowSource
+                    arrowLayer = customizedLayer(arrowLayer)
                     
                     let layerPosition = layerPosition(for: NavigationMapView.LayerIdentifier.arrowLayer, route: route)
                     try mapView.mapboxMap.style.addPersistentLayer(arrowLayer, layerPosition: layerPosition)
@@ -444,6 +541,7 @@ open class NavigationMapView: UIView {
                     
                     try mapView.mapboxMap.style.addSource(arrowStrokeSource, id: NavigationMapView.SourceIdentifier.arrowStrokeSource)
                     arrowStrokeLayer.source = NavigationMapView.SourceIdentifier.arrowStrokeSource
+                    arrowStrokeLayer = customizedLayer(arrowStrokeLayer)
                     
                     try mapView.mapboxMap.style.addPersistentLayer(arrowStrokeLayer, layerPosition: .below(NavigationMapView.LayerIdentifier.arrowLayer))
                 }
@@ -485,7 +583,9 @@ open class NavigationMapView: UIView {
                     
                     try mapView.mapboxMap.style.addSource(arrowSymbolSource, id: NavigationMapView.SourceIdentifier.arrowSymbolSource)
                     arrowSymbolLayer.source = NavigationMapView.SourceIdentifier.arrowSymbolSource
+                    arrowSymbolLayer = customizedLayer(arrowSymbolLayer)
                     arrowSymbolCasingLayer.source = NavigationMapView.SourceIdentifier.arrowSymbolSource
+                    arrowSymbolCasingLayer = customizedLayer(arrowSymbolCasingLayer)
                     
                     try mapView.mapboxMap.style.addPersistentLayer(arrowSymbolLayer, layerPosition: .above(NavigationMapView.LayerIdentifier.arrowLayer))
                     try mapView.mapboxMap.style.addPersistentLayer(arrowSymbolCasingLayer,
@@ -583,18 +683,19 @@ open class NavigationMapView: UIView {
         }
         
         if lineLayer == nil {
-            lineLayer = LineLayer(id: layerIdentifier)
-            lineLayer?.source = sourceIdentifier
-            lineLayer?.lineColor = .constant(.init(routeRestrictedAreaColor))
-            lineLayer?.lineWidth = .expression(Expression.routeLineWidthExpression(0.5))
-            lineLayer?.lineJoin = .constant(.round)
-            lineLayer?.lineCap = .constant(.round)
-            lineLayer?.lineOpacity = .constant(0.5)
+            var defaultLineLayer = LineLayer(id: layerIdentifier)
+            defaultLineLayer.source = sourceIdentifier
+            defaultLineLayer.lineColor = .constant(.init(routeRestrictedAreaColor))
+            defaultLineLayer.lineWidth = .expression(Expression.routeLineWidthExpression(0.5))
+            defaultLineLayer.lineJoin = .constant(.round)
+            defaultLineLayer.lineCap = .constant(.round)
+            defaultLineLayer.lineOpacity = .constant(0.5)
             
             let routeLineStops = routeLineRestrictionsGradient(restrictedRoadsFeatures)
-            lineLayer?.lineGradient = .expression(Expression.routeLineGradientExpression(routeLineStops,
+            defaultLineLayer.lineGradient = .expression(Expression.routeLineGradientExpression(routeLineStops,
                                                                                          lineBaseColor: routeRestrictedAreaColor))
-            lineLayer?.lineDasharray = .constant([0.5, 2.0])
+            defaultLineLayer.lineDasharray = .constant([0.5, 2.0])
+            lineLayer = customizedLayer(defaultLineLayer)
         }
         
         if let lineLayer = lineLayer {
@@ -651,19 +752,19 @@ open class NavigationMapView: UIView {
         }
         
         if lineLayer == nil {
-            lineLayer = LineLayer(id: layerIdentifier)
-            lineLayer?.source = sourceIdentifier
-            lineLayer?.lineColor = .constant(.init(trafficUnknownColor))
-            lineLayer?.lineWidth = .expression(Expression.routeLineWidthExpression())
-            lineLayer?.lineJoin = .constant(.round)
-            lineLayer?.lineCap = .constant(.round)
+            var defaultLineLayer = LineLayer(id: layerIdentifier)
+            defaultLineLayer.source = sourceIdentifier
+            defaultLineLayer.lineColor = .constant(.init(trafficUnknownColor))
+            defaultLineLayer.lineWidth = .expression(Expression.routeLineWidthExpression())
+            defaultLineLayer.lineJoin = .constant(.round)
+            defaultLineLayer.lineCap = .constant(.round)
             
             if isMainRoute {
                 let congestionFeatures = route.congestionFeatures(legIndex: legIndex, roadClassesWithOverriddenCongestionLevels: roadClassesWithOverriddenCongestionLevels)
                 let gradientStops = routeLineCongestionGradient(route,
                                                                 congestionFeatures: congestionFeatures,
                                                                 isSoft: crossfadesCongestionSegments)
-                lineLayer?.lineGradient = .expression((Expression.routeLineGradientExpression(gradientStops,
+                defaultLineLayer.lineGradient = .expression((Expression.routeLineGradientExpression(gradientStops,
                                                                                               lineBaseColor: trafficUnknownColor,
                                                                                               isSoft: crossfadesCongestionSegments)))
             } else {
@@ -672,16 +773,18 @@ open class NavigationMapView: UIView {
                                                                     congestionFeatures: route.congestionFeatures(roadClassesWithOverriddenCongestionLevels: roadClassesWithOverriddenCongestionLevels),
                                                                     isMain: false,
                                                                     isSoft: crossfadesCongestionSegments)
-                    lineLayer?.lineGradient = .expression((Expression.routeLineGradientExpression(gradientStops,
+                    defaultLineLayer.lineGradient = .expression((Expression.routeLineGradientExpression(gradientStops,
                                                                                                   lineBaseColor: alternativeTrafficUnknownColor,
                                                                                                   isSoft: crossfadesCongestionSegments)))
                 } else {
                     let gradientStops: [Double: UIColor] = [1.0: routeAlternateColor]
-                    lineLayer?.lineGradient = .expression((Expression.routeLineGradientExpression(gradientStops,
+                    defaultLineLayer.lineGradient = .expression((Expression.routeLineGradientExpression(gradientStops,
                                                                                                   lineBaseColor: routeAlternateColor,
                                                                                                   isSoft: false)))
                 }
             }
+            
+            lineLayer = customizedLayer(defaultLineLayer)
         }
         
         if let lineLayer = lineLayer {
@@ -745,22 +848,24 @@ open class NavigationMapView: UIView {
         }
         
         if lineLayer == nil {
-            lineLayer = LineLayer(id: layerIdentifier)
-            lineLayer?.source = sourceIdentifier
-            lineLayer?.lineColor = .constant(.init(routeCasingColor))
-            lineLayer?.lineWidth = .expression(Expression.routeLineWidthExpression(1.5))
-            lineLayer?.lineJoin = .constant(.round)
-            lineLayer?.lineCap = .constant(.round)
+            var defaultLineLayer = LineLayer(id: layerIdentifier)
+            defaultLineLayer.source = sourceIdentifier
+            defaultLineLayer.lineColor = .constant(.init(routeCasingColor))
+            defaultLineLayer.lineWidth = .expression(Expression.routeLineWidthExpression(1.5))
+            defaultLineLayer.lineJoin = .constant(.round)
+            defaultLineLayer.lineCap = .constant(.round)
             
             if isMainRoute {
                 let gradientStops = routeLineCongestionGradient(route)
-                lineLayer?.lineGradient = .expression((Expression.routeLineGradientExpression(gradientStops, lineBaseColor: routeCasingColor)))
+                defaultLineLayer.lineGradient = .expression((Expression.routeLineGradientExpression(gradientStops, lineBaseColor: routeCasingColor)))
             } else {
                 let gradientStops: [Double: UIColor] = [1.0: routeAlternateCasingColor]
-                lineLayer?.lineGradient = .expression((Expression.routeLineGradientExpression(gradientStops,
+                defaultLineLayer.lineGradient = .expression((Expression.routeLineGradientExpression(gradientStops,
                                                                                               lineBaseColor: routeAlternateCasingColor,
                                                                                               isSoft: false)))
             }
+            
+            lineLayer = customizedLayer(defaultLineLayer)
         }
         
         if let lineLayer = lineLayer {
@@ -816,10 +921,23 @@ open class NavigationMapView: UIView {
             lineLayer = LineLayer(id: layerIdentifier)
             lineLayer?.source = sourceIdentifier
             lineLayer?.lineColor = .constant(.init(traversedRouteColor))
-            // The traversed route layer should have the same width as the main route casing layer.
-            lineLayer?.lineWidth = .expression(Expression.routeLineWidthExpression(1.5))
-            lineLayer?.lineJoin = .constant(.round)
-            lineLayer?.lineCap = .constant(.round)
+        }
+        
+        if var defaultLinelayer = lineLayer {
+            let routeCasingLayerIdentifier = route.identifier(.routeCasing(isMainRoute: true))
+            // Because users could modify the route casing layer property, the traversed route layer should have same property values as the main route casing layer,
+            // except the line color.
+            if let routeCasingLayer = try? mapView.mapboxMap.style.layer(withId: routeCasingLayerIdentifier, type: LineLayer.self) {
+                // The traversed route layer should have the same width as the main route casing layer.
+                defaultLinelayer.lineWidth = routeCasingLayer.lineWidth
+                defaultLinelayer.lineJoin = routeCasingLayer.lineJoin
+                defaultLinelayer.lineCap = routeCasingLayer.lineCap
+            } else {
+                defaultLinelayer.lineWidth = .expression(Expression.routeLineWidthExpression(1.5))
+                defaultLinelayer.lineJoin = .constant(.round)
+                defaultLinelayer.lineCap = .constant(.round)
+            }
+            lineLayer = customizedLayer(defaultLinelayer)
         }
         
         if let lineLayer = lineLayer {
@@ -891,10 +1009,10 @@ open class NavigationMapView: UIView {
     
     var accuracyAuthorization: CLAccuracyAuthorization = .fullAccuracy {
         didSet {
-            // `UserHaloCourseView` will be applied in two cases:
-            // 1. When user explicitly sets `NavigationMapView.reducedAccuracyActivatedMode` to `true`.
-            // 2. When user disables `Precise Location` property in the settings of current application.
-            let shouldApply = reducedAccuracyActivatedMode || accuracyAuthorization == .reducedAccuracy
+            // `UserHaloCourseView` will be applied in only one case:
+            // when user explicitly sets `NavigationMapView.reducedAccuracyActivatedMode` to `true`,
+            // and the `Precise Location` property in the settings of current application is disabled by user.
+            let shouldApply = reducedAccuracyActivatedMode && accuracyAuthorization == .reducedAccuracy
             applyReducedAccuracyMode(shouldApply: shouldApply)
         }
     }
@@ -978,13 +1096,16 @@ open class NavigationMapView: UIView {
     
     /**
      Allows to control current user location styling based on accuracy authorization permission on iOS 14 and above.
+     Defaults to `false`.
      
+     When user disable the `Precise Location` property in the settings of current application:
      If `false`, user location will be drawn based on style, which was set in `NavigationMapView.userLocationStyle`.
      If `true`, `UserHaloCourseView` will be shown.
      */
     @objc dynamic public var reducedAccuracyActivatedMode: Bool = false {
         didSet {
-            applyReducedAccuracyMode(shouldApply: reducedAccuracyActivatedMode)
+            let shouldApply = reducedAccuracyActivatedMode && accuracyAuthorization == .reducedAccuracy
+            applyReducedAccuracyMode(shouldApply: shouldApply)
         }
     }
     
@@ -1123,210 +1244,7 @@ open class NavigationMapView: UIView {
         }
     }
     
-    private let continuousAlternativeDurationAnnotationOffset: LocationDistance = 75
-    
-    func showContinuousAlternativeRoutesDurations() {
-        // Remove any existing route annotation.
-        removeContinuousAlternativeRoutesDurations()
-        
-        guard showsRelativeDurationOnContinuousAlternativeRoutes,
-              let visibleRoutes = continuousAlternatives, visibleRoutes.count > 0 else { return }
-        
-        do {
-            try updateAnnotationSymbolImages()
-        } catch {
-            NSLog("Error occured while updating annotation symbol images: \(error.localizedDescription).")
-        }
-        
-        updateContinuousAlternativeRoutesDurations(along: visibleRoutes)
-    }
-    
-    private func updateContinuousAlternativeRoutesDurations(along alternativeRoutes: [AlternativeRoute]?) {
-        guard let routes = alternativeRoutes else { return }
-        
-        let tollRoutes = routes.filter { route -> Bool in
-            return (route.indexedRouteResponse.currentRoute?.tollIntersections?.count ?? 0) > 0
-        }
-        let routesContainTolls = tollRoutes.count > 0
-        
-        var features = [Turf.Feature]()
-        
-        for (index, alternativeRoute) in routes.enumerated() {
-            guard let routeShape = alternativeRoute.indexedRouteResponse.currentRoute?.shape else { return }
-            
-            var annotationCoordinate: LocationCoordinate2D!
-            if let mainRoute = self.routes?.first {
-                let offset = mainRoute.distance - alternativeRoute.infoFromDeviationPoint.distance + continuousAlternativeDurationAnnotationOffset
-                annotationCoordinate = routeShape.indexedCoordinateFromStart(distance: offset)?.coordinate
-            } else {
-                annotationCoordinate = routeShape.indexedCoordinateFromStart(distance: alternativeRoute.infoFromOrigin.distance - alternativeRoute.infoFromDeviationPoint.distance + continuousAlternativeDurationAnnotationOffset)?.coordinate
-            }
-            
-            // Form the appropriate text string for the annotation.
-            let labelText = self.annotationLabelForAlternativeRoute(alternativeRoute,
-                                                                    tolls: routesContainTolls)
-            
-            let feature = composeCalloutFeature(annotationCoordinate: annotationCoordinate,
-                                                labelText: labelText,
-                                                index: index,
-                                                isSelected: false)
-            
-            features.append(feature)
-        }
-        
-        // Add the features to the style.
-        do {
-            try addRouteAnnotationSymbolLayer(features: FeatureCollection(features: features),
-                                              sourceIdentifier: NavigationMapView.SourceIdentifier.continuousAlternativeRoutesDurationAnnotationsSource,
-                                              layerIdentifier: NavigationMapView.LayerIdentifier.continuousAlternativeRoutesDurationAnnotationsLayer)
-        } catch {
-            NSLog("Error occured while adding route annotation symbol layer: \(error.localizedDescription).")
-        }
-    }
-    /**
-     Remove any old route duration callouts and generate new ones for each passed in route.
-     */
-    private func updateRouteDurations(along routes: [Route]?) {
-        // Remove any existing route annotation.
-        removeRouteDurations()
-        
-        guard let routes = routes else { return }
-        
-        let coordinateBounds = mapView.mapboxMap.coordinateBounds(for: mapView.frame)
-        let visibleBoundingBox = BoundingBox(southWest: coordinateBounds.southwest, northEast: coordinateBounds.northeast)
-        
-        let tollRoutes = routes.filter { route -> Bool in
-            return (route.tollIntersections?.count ?? 0) > 0
-        }
-        let routesContainTolls = tollRoutes.count > 0
-        
-        var features = [Turf.Feature]()
-        
-        // Run through our heuristic algorithm looking for a good coordinate along each route line
-        // to place it's route annotation.
-        // First, we will look for a set of RouteSteps unique to each route.
-        var excludedSteps = [RouteStep]()
-        for (index, route) in routes.enumerated() {
-            let allSteps = route.legs.flatMap { return $0.steps }
-            let alternateSteps = allSteps.filter { !excludedSteps.contains($0) }
-            
-            excludedSteps.append(contentsOf: alternateSteps)
-            let visibleAlternateSteps = alternateSteps.filter { $0.intersects(visibleBoundingBox) }
-            
-            var coordinate: CLLocationCoordinate2D?
-            
-            // Obtain a polyline of the set of steps. We'll look for a good spot along this line to
-            // place the annotation.
-            // We will consider a good spot to be somewhere near the middle of the line, making sure
-            // that the coordinate is visible on-screen.
-            if let continuousLine = visibleAlternateSteps.continuousShape(),
-                continuousLine.coordinates.count > 0 {
-                coordinate = continuousLine.coordinates[0]
-                
-                // Pick a coordinate using some randomness in order to give visual variety.
-                // Take care to snap that coordinate to one that lays on the original route line.
-                // If the chosen snapped coordinate is not visible on the screen, then we walk back
-                // along the route coordinates looking for one that is.
-                // If none of the earlier points are on screen then we walk forward along the route
-                // coordinates until we find one that is.
-                if let distance = continuousLine.distance(),
-                    let sampleCoordinate = continuousLine.indexedCoordinateFromStart(distance: distance * CLLocationDistance.random(in: 0.3...0.8))?.coordinate,
-                    let routeShape = route.shape,
-                    let snappedCoordinate = routeShape.closestCoordinate(to: sampleCoordinate) {
-                    var foundOnscreenCoordinate = false
-                    var firstOnscreenCoordinate = snappedCoordinate.coordinate
-                    for indexedCoordinate in routeShape.coordinates.prefix(through: snappedCoordinate.index).reversed() {
-                        if visibleBoundingBox.contains(indexedCoordinate) {
-                            firstOnscreenCoordinate = indexedCoordinate
-                            foundOnscreenCoordinate = true
-                            break
-                        }
-                    }
-                    
-                    if foundOnscreenCoordinate {
-                        // We found a point that is both on the route and on-screen.
-                        coordinate = firstOnscreenCoordinate
-                    } else {
-                        // We didn't find a previous point that is on-screen so we'll move forward
-                        // through the coordinates looking for one.
-                        for indexedCoordinate in routeShape.coordinates.suffix(from: snappedCoordinate.index) {
-                            if visibleBoundingBox.contains(indexedCoordinate) {
-                                firstOnscreenCoordinate = indexedCoordinate
-                                break
-                            }
-                        }
-                        coordinate = firstOnscreenCoordinate
-                    }
-                }
-            }
-            
-            guard let annotationCoordinate = coordinate else { return }
-            
-            // Form the appropriate text string for the annotation.
-            let labelText = self.annotationLabelForRoute(route, tolls: routesContainTolls)
-            
-            
-            let feature = composeCalloutFeature(annotationCoordinate: annotationCoordinate,
-                                                labelText: labelText,
-                                                index: index,
-                                                isSelected: index == 0)
-            features.append(feature)
-        }
-        
-        // Add the features to the style.
-        do {
-            try addRouteAnnotationSymbolLayer(features: FeatureCollection(features: features),
-                                              sourceIdentifier: NavigationMapView.SourceIdentifier.routeDurationAnnotationsSource,
-                                              layerIdentifier: NavigationMapView.LayerIdentifier.routeDurationAnnotationsLayer)
-        } catch {
-            Log.error("Error occured while adding route annotation symbol layer: \(error.localizedDescription).",
-                      category: .navigationUI)
-        }
-    }
-    
-    private func composeCalloutFeature(annotationCoordinate: LocationCoordinate2D,
-                                       labelText: String,
-                                       index: Int,
-                                       isSelected: Bool) -> Feature {
-        // Create the feature for this route annotation. Set the styling attributes that will be
-        // used to render the annotation in the style layer.
-        var feature = Feature(geometry: .point(Point(annotationCoordinate)))
-        
-        // Pick a random tail direction to keep things varied.
-        guard var tailPosition = [
-            RouteDurationAnnotationTailPosition.leading,
-            RouteDurationAnnotationTailPosition.trailing
-        ].randomElement() else { return  feature }
-        
-        // Convert our coordinate to screen space so we can make a choice on which side of the
-        // coordinate the label ends up on.
-        let unprojectedCoordinate = mapView.mapboxMap.point(for: annotationCoordinate)
-        
-        // Pick the orientation of the bubble "stem" based on how close to the edge of the screen it is.
-        if tailPosition == .leading && unprojectedCoordinate.x > bounds.width * 0.75 {
-            tailPosition = .trailing
-        } else if tailPosition == .trailing && unprojectedCoordinate.x < bounds.width * 0.25 {
-            tailPosition = .leading
-        }
-        
-        var imageName = tailPosition == .leading ? ImageIdentifier.routeAnnotationLeftHanded : ImageIdentifier.routeAnnotationRightHanded
-        
-        // The selected route uses the colored annotation image.
-        if isSelected {
-            imageName += "-Selected"
-        }
-        
-        // Set the feature attributes which will be used in styling the symbol style layer.
-        feature.properties = [
-            "selected": .boolean(isSelected),
-            "tailPosition": .number(Double(tailPosition.rawValue)),
-            "text": .string(labelText),
-            "imageName": .string(imageName),
-            "sortOrder": .number(Double(isSelected ? index : -index)),
-        ]
-        
-        return feature
-    }
+    let continuousAlternativeDurationAnnotationOffset: LocationDistance = 75
     
     /**
      Removes all visible route duration callouts.
@@ -1348,14 +1266,14 @@ open class NavigationMapView: UIView {
     }
     
     /**
-     `PointAnnotation`, which should be added to the `MapView` when `PointAnnotationManager` becomes
+     Array of `PointAnnotation`s, which should be added to the `MapView` when `PointAnnotationManager` becomes
      available. Since `PointAnnotationManager` is created only after loading `MapView` style, there
      is a chance that due to a race condition during `NavigationViewController` creation
      `NavigationMapView.showWaypoints(on:legIndex:)` will be called before loading style. In such case
      final destination `PointAnnotation` will be stored in this property and added to the `MapView`
      later on.
      */
-    var finalDestinationAnnotation: PointAnnotation? = nil
+    var finalDestinationAnnotations: [PointAnnotation] = []
     
     /**
      Adds the route waypoints to the map given the current leg index. Previous waypoints for completed legs will be omitted.
@@ -1393,17 +1311,19 @@ open class NavigationMapView: UIView {
                     try mapView.mapboxMap.style.addSource(waypointSource, id: waypointSourceIdentifier)
                     
                     let waypointCircleLayerIdentifier = NavigationMapView.LayerIdentifier.waypointCircleLayer
-                    let circlesLayer = delegate?.navigationMapView(self,
+                    var circlesLayer = delegate?.navigationMapView(self,
                                                                    waypointCircleLayerWithIdentifier: waypointCircleLayerIdentifier,
                                                                    sourceIdentifier: waypointSourceIdentifier) ?? defaultWaypointCircleLayer()
+                    circlesLayer = customizedLayer(circlesLayer)
                     
                     let layerPosition = layerPosition(for: waypointCircleLayerIdentifier, route: route)
                     try mapView.mapboxMap.style.addPersistentLayer(circlesLayer, layerPosition: layerPosition)
                     
                     let waypointSymbolLayerIdentifier = NavigationMapView.LayerIdentifier.waypointSymbolLayer
-                    let symbolsLayer = delegate?.navigationMapView(self,
+                    var symbolsLayer = delegate?.navigationMapView(self,
                                                                    waypointSymbolLayerWithIdentifier: waypointSymbolLayerIdentifier,
                                                                    sourceIdentifier: waypointSourceIdentifier) ?? defaultWaypointSymbolLayer()
+                    symbolsLayer = customizedLayer(symbolsLayer)
                     
                     try mapView.mapboxMap.style.addPersistentLayer(symbolsLayer, layerPosition: .above(waypointCircleLayerIdentifier))
                 }
@@ -1415,29 +1335,40 @@ open class NavigationMapView: UIView {
         
         if let lastLeg = route.legs.last,
            let destinationCoordinate = lastLeg.destination?.coordinate {
-            let identifier = NavigationMapView.AnnotationIdentifier.finalDestinationAnnotation
-            var destinationAnnotation = PointAnnotation(id: identifier, coordinate: destinationCoordinate)
-            let markerImage = UIImage(named: "default_marker", in: .mapboxNavigation, compatibleWith: nil)!
-            destinationAnnotation.image = .init(image: markerImage, name: ImageIdentifier.markerImage)
-            
-            // If `PointAnnotationManager` is available - add `PointAnnotation`, if not - remember it
-            // and add it only after fully loading `MapView` style.
-            if let pointAnnotationManager = pointAnnotationManager {
-                pointAnnotationManager.annotations = [destinationAnnotation]
-                delegate?.navigationMapView(self,
-                                            didAdd: destinationAnnotation,
-                                            pointAnnotationManager: pointAnnotationManager)
-            } else {
-                finalDestinationAnnotation = destinationAnnotation
-            }
+            addDestinationAnnotation(destinationCoordinate)
         }
+    }
+    
+    func addDestinationAnnotation(_ coordinate: CLLocationCoordinate2D,
+                                  identifier: String = NavigationMapView.AnnotationIdentifier.finalDestinationAnnotation) {
+        var destinationAnnotation = PointAnnotation(id: identifier, coordinate: coordinate)
+        destinationAnnotation.image = .init(image: .defaultMarkerImage, name: ImageIdentifier.markerImage)
+        
+        // If `PointAnnotationManager` is available - add `PointAnnotation`, if not - remember it
+        // and add it only after fully loading `MapView` style.
+        if let pointAnnotationManager = pointAnnotationManager {
+            pointAnnotationManager.annotations.append(destinationAnnotation)
+            delegate?.navigationMapView(self,
+                                        didAdd: destinationAnnotation,
+                                        pointAnnotationManager: pointAnnotationManager)
+        } else {
+            finalDestinationAnnotations.append(destinationAnnotation)
+        }
+    }
+    
+    func removeDestinationAnnotation(_ identifier: String = NavigationMapView.AnnotationIdentifier.finalDestinationAnnotation) {
+        let remainingAnnotations = pointAnnotationManager?.annotations.filter {
+            $0.id != identifier
+        }
+        
+        pointAnnotationManager?.annotations = remainingAnnotations ?? []
     }
     
     /**
      Removes all existing `Waypoint` objects from `MapView`, which were added by `NavigationMapView`.
      */
     public func removeWaypoints() {
-        pointAnnotationManager?.annotations = []
+        removeDestinationAnnotation()
         
         let layers: Set = [
             NavigationMapView.LayerIdentifier.waypointCircleLayer,
@@ -1494,127 +1425,6 @@ open class NavigationMapView: UIView {
         return symbolLayer
     }
     
-    /**
-     Add the MGLSymbolStyleLayer for the route duration annotations.
-     */
-    private func addRouteAnnotationSymbolLayer(features: FeatureCollection,
-                                               sourceIdentifier: String,
-                                               layerIdentifier: String) throws {
-        let style = mapView.mapboxMap.style
-        
-        if style.sourceExists(withId: sourceIdentifier) {
-            try style.updateGeoJSONSource(withId: sourceIdentifier, geoJSON: .featureCollection(features))
-        } else {
-            var dataSource = GeoJSONSource()
-            dataSource.data = .featureCollection(features)
-            try style.addSource(dataSource, id: sourceIdentifier)
-        }
-        
-        var shapeLayer: SymbolLayer
-        if style.layerExists(withId: layerIdentifier),
-           let symbolLayer = try style.layer(withId: layerIdentifier) as? SymbolLayer {
-            shapeLayer = symbolLayer
-        } else {
-            shapeLayer = SymbolLayer(id: layerIdentifier)
-        }
-        
-        shapeLayer.source = sourceIdentifier
-        
-        shapeLayer.textField = .expression(Exp(.get) {
-            "text"
-        })
-        
-        shapeLayer.iconImage = .expression(Exp(.get) {
-            "imageName"
-        })
-        
-        shapeLayer.textColor = .expression(Exp(.switchCase) {
-            Exp(.any) {
-                Exp(.get) {
-                    "selected"
-                }
-            }
-            routeDurationAnnotationSelectedTextColor
-            routeDurationAnnotationTextColor
-        })
-        
-        shapeLayer.textSize = .constant(16)
-        shapeLayer.iconTextFit = .constant(IconTextFit.both)
-        shapeLayer.iconAllowOverlap = .constant(true)
-        shapeLayer.textAllowOverlap = .constant(true)
-        shapeLayer.textJustify = .constant(TextJustify.left)
-        shapeLayer.symbolZOrder = .constant(SymbolZOrder.auto)
-        shapeLayer.textFont = .constant(self.routeDurationAnnotationFontNames)
-        
-        shapeLayer.symbolSortKey = .expression(Exp(.get) {
-            "sortOrder"
-        })
-        
-        let anchorExpression = Exp(.match) {
-            Exp(.get) { "tailPosition" }
-            0
-            "bottom-left"
-            1
-            "bottom-right"
-            "center"
-        }
-        shapeLayer.iconAnchor = .expression(anchorExpression)
-        shapeLayer.textAnchor = .expression(anchorExpression)
-        
-        let offsetExpression = Exp(.match) {
-            Exp(.get) { "tailPosition" }
-            0
-            Exp(.literal) { [0.5, -1.0] }
-            Exp(.literal) { [-0.5, -1.0] }
-        }
-        shapeLayer.iconOffset = .expression(offsetExpression)
-        shapeLayer.textOffset = .expression(offsetExpression)
-        
-        let layerPosition = layerPosition(for: layerIdentifier)
-        try style.addPersistentLayer(shapeLayer, layerPosition: layerPosition)
-    }
-    
-    /**
-     Generate the text for the label to be shown on screen. It will include estimated duration
-     and info on Tolls, if applicable.
-     */
-    private func annotationLabelForRoute(_ route: Route, tolls: Bool) -> String {
-        let eta = DateComponentsFormatter.shortDateComponentsFormatter.string(from: route.expectedTravelTime) ?? ""
-        
-        return tollAnnotationForLabel(on: route, tolls: tolls, label: eta)
-    }
-    
-    /**
-     Generate the text for the label to be shown on screen. It will include estimated duration delta relative to the main route
-     and info on Tolls, if applicable.
-     */
-    private func annotationLabelForAlternativeRoute(_ alternativeRoute: AlternativeRoute, tolls: Bool) -> String {
-        let timeDelta = DateComponentsFormatter.travelTimeString(alternativeRoute.expectedTravelTimeDelta,
-                                                                 signed: true,
-                                                                 unitStyle: nil)
-        
-        return tollAnnotationForLabel(on: alternativeRoute.indexedRouteResponse.currentRoute,
-                                      tolls: tolls,
-                                      label: timeDelta)
-    }
-    
-    private func tollAnnotationForLabel(on route: Route?, tolls: Bool, label: String) -> String {
-        var labelWithTolls = label
-        let hasTolls = (route?.tollIntersections?.count ?? 0) > 0
-        if hasTolls {
-            labelWithTolls += "\n" + NSLocalizedString("ROUTE_HAS_TOLLS", bundle: .mapboxNavigation, value: "Tolls", comment: "This route does have tolls")
-            if let symbol = Locale.current.currencySymbol {
-                labelWithTolls += " " + symbol
-            }
-        } else if tolls {
-            // If one of the routes has tolls, but this one does not then it needs to explicitly say that it has no tolls
-            // If no routes have tolls at all then we can omit this portion of the string.
-            labelWithTolls += "\n" + NSLocalizedString("ROUTE_HAS_NO_TOLLS", bundle: .mapboxNavigation, value: "No Tolls", comment: "This route does not have tolls")
-        }
-        
-        return labelWithTolls
-    }
-    
     // MARK: Managing Annotations
     
     /**
@@ -1628,71 +1438,22 @@ open class NavigationMapView: UIView {
         return pointAnnotationManager?.annotations.filter({ $0.id == identifier }) ?? []
     }
     
-    /**
-     Updates the image assets in the map style for the route duration annotations. Useful when the
-     desired callout colors change, such as when transitioning between light and dark mode on iOS 13 and later.
-     */
-    private func updateAnnotationSymbolImages() throws {
-        let style = mapView.mapboxMap.style
-        
-        guard style.image(withId: "RouteInfoAnnotationLeftHanded") == nil,
-              style.image(withId: "RouteInfoAnnotationRightHanded") == nil else { return }
-        
-        // Right-hand pin
-        if let image = Bundle.mapboxNavigation.image(named: "RouteInfoAnnotationRightHanded") {
-            // define the "stretchable" areas in the image that will be fitted to the text label
-            // These numbers are the pixel offsets into the PDF image asset
-            let stretchX = [ImageStretches(first: Float(33), second: Float(52))]
-            let stretchY = [ImageStretches(first: Float(32), second: Float(35))]
-            // define the "content" area of the image which is the portion that the maps sdk will use
-            // to place the text label within
-            let imageContent = ImageContent(left: 34, top: 32, right: 56, bottom: 50)
-            
-            let regularAnnotationImage = image.tint(routeDurationAnnotationColor)
-            try style.addImage(regularAnnotationImage,
-                               id: "RouteInfoAnnotationRightHanded",
-                               stretchX: stretchX,
-                               stretchY: stretchY,
-                               content: imageContent)
-            
-            let selectedAnnotationImage = image.tint(routeDurationAnnotationSelectedColor)
-            try style.addImage(selectedAnnotationImage,
-                               id: "RouteInfoAnnotationRightHanded-Selected",
-                               stretchX: stretchX,
-                               stretchY: stretchY,
-                               content: imageContent)
-        }
-        
-        // Left-hand pin
-        if let image = Bundle.mapboxNavigation.image(named: "RouteInfoAnnotationLeftHanded") {
-            // define the "stretchable" areas in the image that will be fitted to the text label
-            // These numbers are the pixel offsets into the PDF image asset
-            let stretchX = [ImageStretches(first: Float(47), second: Float(48))]
-            let stretchY = [ImageStretches(first: Float(28), second: Float(32))]
-            // define the "content" area of the image which is the portion that the maps sdk will use
-            // to place the text label within
-            let imageContent = ImageContent(left: 47, top: 28, right: 52, bottom: 40)
-            
-            let regularAnnotationImage = image.tint(routeDurationAnnotationColor)
-            try style.addImage(regularAnnotationImage,
-                               id: "RouteInfoAnnotationLeftHanded",
-                               stretchX: stretchX,
-                               stretchY: stretchY,
-                               content: imageContent)
-            
-            let selectedAnnotationImage = image.tint(routeDurationAnnotationSelectedColor)
-            try style.addImage(selectedAnnotationImage,
-                               id: "RouteInfoAnnotationLeftHanded-Selected",
-                               stretchX: stretchX,
-                               stretchY: stretchY,
-                               content: imageContent)
-        }
-    }
-    
     // MARK: Map Rendering and Observing
     
     var routes: [Route]?
-    var continuousAlternatives: [AlternativeRoute]?
+    var continuousAlternatives: [AlternativeRoute]? {
+        didSet {
+            alternativesRouteLineDeviationOffsets = continuousAlternatives?.map {
+                guard let coordinates = $0.indexedRouteResponse.currentRoute?.shape?.coordinates,
+                      let projectedOffset = calculateGranularDistanceOffset(coordinates,
+                                                                            splitPoint: $0.alternativeRouteIntersection.location) else {
+                    return 0.0
+                }
+                return projectedOffset
+            }
+        }
+    }
+    var alternativesRouteLineDeviationOffsets: [Double]?
     var routePoints: RoutePoints?
     var routeLineGranularDistances: RouteLineGranularDistances?
     var routeRemainingDistancesIndex: Int?
@@ -1734,7 +1495,7 @@ open class NavigationMapView: UIView {
      need to call this method on the value of `NavigationViewController.navigationMapView`.
      */
     public func localizeLabels() {
-        guard let preferredLocale = VectorSource.preferredMapboxStreetsLocale(for: .nationalizedCurrent) else { return }
+        guard let preferredLocale = VectorSource.preferredMapboxStreetsLocale(for: nil) else { return }
         mapView.localizeLabels(into: preferredLocale)
     }
     
@@ -1786,6 +1547,8 @@ open class NavigationMapView: UIView {
                 symbolLayer.textOpacity = .constant(0.75)
                 symbolLayer.textAnchor = .constant(.bottom)
                 symbolLayer.textJustify = .constant(.left)
+                symbolLayer = customizedLayer(symbolLayer)
+                
                 let layerPosition = layerPosition(for: NavigationMapView.LayerIdentifier.voiceInstructionLabelLayer)
                 try mapView.mapboxMap.style.addPersistentLayer(symbolLayer, layerPosition: layerPosition)
                 
@@ -1794,12 +1557,24 @@ open class NavigationMapView: UIView {
                 circleLayer.circleRadius = .constant(5)
                 circleLayer.circleOpacity = .constant(0.75)
                 circleLayer.circleColor = .constant(.init(.white))
+                circleLayer = customizedLayer(circleLayer)
+                
                 try mapView.mapboxMap.style.addPersistentLayer(circleLayer, layerPosition: .above(NavigationMapView.LayerIdentifier.voiceInstructionLabelLayer))
             }
         } catch {
             Log.error("Failed to perform operation while adding voice instructions with error: \(error.localizedDescription).",
                       category: .navigationUI)
         }
+    }
+    
+    func customizedLayer<T>(_ layer: T) -> T where T: Layer {
+        if let customizedLayer = delegate?.navigationMapView(self, willAdd: layer) {
+            guard let customizedLayer = customizedLayer as? T else {
+                preconditionFailure("The customized layer should have the same layer type as the default layer.")
+            }
+            return customizedLayer
+        }
+        return layer
     }
     
     func layerPosition(for layerIdentifier: String, route: Route? = nil, customLayerPosition: MapboxMaps.LayerPosition? = nil) -> MapboxMaps.LayerPosition? {
@@ -1818,7 +1593,8 @@ open class NavigationMapView: UIView {
             LayerIdentifier.arrowStrokeLayer,
             LayerIdentifier.arrowLayer,
             LayerIdentifier.arrowSymbolCasingLayer,
-            LayerIdentifier.arrowSymbolLayer
+            LayerIdentifier.arrowSymbolLayer,
+            LayerIdentifier.intersectionAnnotationsLayer
         ]
         let uppermostSymbolLayers: [String] = [
             LayerIdentifier.waypointCircleLayer,
@@ -1931,7 +1707,7 @@ open class NavigationMapView: UIView {
     public override init(frame: CGRect) {
         super.init(frame: frame)
         
-        setupMapView(frame)
+        setupMapView(mapView: makeMapView(frame: frame))
         commonInit()
     }
     
@@ -1946,8 +1722,24 @@ open class NavigationMapView: UIView {
                 navigationCameraType: NavigationCameraType = .mobile,
                 tileStoreLocation: TileStoreConfiguration.Location? = .default) {
         super.init(frame: frame)
-        
-        setupMapView(frame, navigationCameraType: navigationCameraType, tileStoreLocation: tileStoreLocation)
+        let mapView = makeMapView(
+            frame: frame,
+            navigationCameraType: navigationCameraType,
+            tileStoreLocation: tileStoreLocation
+        )
+        setupMapView(mapView: mapView, navigationCameraType: navigationCameraType)
+        commonInit()
+    }
+
+    /// :nodoc:
+    public init(
+        frame: CGRect,
+        navigationCameraType: NavigationCameraType = .mobile,
+        mapView: MapView
+    ) {
+        super.init(frame: frame)
+
+        setupMapView(mapView: mapView, navigationCameraType: navigationCameraType)
         commonInit()
     }
     
@@ -1959,7 +1751,7 @@ open class NavigationMapView: UIView {
     public required init?(coder: NSCoder) {
         super.init(coder: coder)
         
-        setupMapView(self.bounds)
+        setupMapView(mapView: makeMapView(frame: bounds))
         commonInit()
     }
     
@@ -1993,21 +1785,23 @@ open class NavigationMapView: UIView {
                                                   name: .navigationCameraStateDidChange,
                                                   object: nil)
     }
-    
-    func setupMapView(_ frame: CGRect,
-                      navigationCameraType: NavigationCameraType = .mobile,
-                      tileStoreLocation: TileStoreConfiguration.Location? = .default) {
+
+    private func makeMapView(
+            frame: CGRect,
+            navigationCameraType: NavigationCameraType = .mobile,
+            tileStoreLocation: TileStoreConfiguration.Location? = .default
+    ) -> MapView {
         let accessToken = ResourceOptionsManager.default.resourceOptions.accessToken
-        
+
         // TODO: allow customising tile store location.
         let tileStore = tileStoreLocation?.tileStore
-        
+
         // In case of CarPlay, use `pixelRatio` value, which is used on second `UIScreen`.
         var pixelRatio = UIScreen.main.scale
         if navigationCameraType == .carPlay, UIScreen.screens.indices.contains(1) {
             pixelRatio = UIScreen.screens[1].scale
         }
-        
+
         let mapOptions = MapOptions(constrainMode: .widthAndHeight,
                                     viewportMode: .default,
                                     orientation: .upwards,
@@ -2016,14 +1810,18 @@ open class NavigationMapView: UIView {
                                     size: nil,
                                     pixelRatio: pixelRatio,
                                     glyphsRasterizationOptions: .init())
-        
+
         let resourceOptions = ResourceOptions(accessToken: accessToken,
-                                              tileStore: tileStore)
-        
+                tileStore: tileStore)
+
         let mapInitOptions = MapInitOptions(resourceOptions: resourceOptions,
-                                            mapOptions: mapOptions)
-        
-        mapView = MapView(frame: frame, mapInitOptions: mapInitOptions)
+                mapOptions: mapOptions)
+
+        return MapView(frame: frame, mapInitOptions: mapInitOptions)
+    }
+    
+    private func setupMapView(mapView: MapView, navigationCameraType: NavigationCameraType = .mobile) {
+        self.mapView = mapView
         mapView.translatesAutoresizingMaskIntoConstraints = false
         mapView.ornaments.options.scaleBar.visibility = .hidden
         storeLocationProviderBeforeSimulation()
@@ -2071,14 +1869,17 @@ open class NavigationMapView: UIView {
             guard let self = self else { return }
             self.pointAnnotationManager = self.mapView.annotations.makePointAnnotationManager()
             
-            if let finalDestinationAnnotation = self.finalDestinationAnnotation,
+            if self.finalDestinationAnnotations.count != 0,
                let pointAnnotationManager = self.pointAnnotationManager {
-                pointAnnotationManager.annotations = [finalDestinationAnnotation]
-                self.delegate?.navigationMapView(self,
-                                                 didAdd: finalDestinationAnnotation,
-                                                 pointAnnotationManager: pointAnnotationManager)
+                pointAnnotationManager.annotations = self.finalDestinationAnnotations
                 
-                self.finalDestinationAnnotation = nil
+                self.finalDestinationAnnotations.forEach {
+                    self.delegate?.navigationMapView(self,
+                                                     didAdd: $0,
+                                                     pointAnnotationManager: pointAnnotationManager)
+                }
+                
+                self.finalDestinationAnnotations = []
             }
         }
         
@@ -2120,12 +1921,59 @@ open class NavigationMapView: UIView {
         if let selected = waypointTest?.first {
             delegate?.navigationMapView(self, didSelect: selected)
             return
-        } else if let routes = self.routes(closeTo: tapPoint),
-                  let selectedRoute = routes.first {
-            delegate?.navigationMapView(self, didSelect: selectedRoute)
-        } else if let alternativeRoutes = self.continuousAlternativeRoutes(closeTo: tapPoint),
-                  let selectedRoute = alternativeRoutes.first {
-            delegate?.navigationMapView(self, didSelect: selectedRoute)
+        }
+        
+        route(at: tapPoint)  { [weak self] (routeFoundByPoint) in
+            guard !routeFoundByPoint, let self = self else { return }
+            if let routes = self.routes(closeTo: tapPoint),
+               let selectedRoute = routes.first {
+                self.delegate?.navigationMapView(self, didSelect: selectedRoute)
+            } else if let alternativeRoutes = self.continuousAlternativeRoutes(closeTo: tapPoint),
+                      let selectedRoute = alternativeRoutes.first {
+                self.delegate?.navigationMapView(self, didSelect: selectedRoute)
+            }
+        }
+    }
+    
+    func route(at point: CGPoint, completion: @escaping (Bool) -> Void) {
+        let group = DispatchGroup()
+        var routeFoundByPoint: Bool = false
+        let layerIds: [String] = [
+            LayerIdentifier.routeDurationAnnotationsLayer,
+            LayerIdentifier.continuousAlternativeRoutesDurationAnnotationsLayer]
+    
+        for layerId in layerIds {
+            group.enter()
+            let options = RenderedQueryOptions(layerIds: [layerId], filter: nil)
+            routeIndexFromMapQuery(with: options, at: point) { [weak self] (routeIndex) in
+                defer { group.leave() }
+                guard let self = self, let routeIndex = routeIndex else { return }
+                if layerId == layerIds.first {
+                    if let route = self.routes?[safe: routeIndex] {
+                        routeFoundByPoint = true
+                        self.delegate?.navigationMapView(self, didSelect: route)
+                    }
+                } else if let alternativeRoute = self.continuousAlternatives?[safe: routeIndex] {
+                    routeFoundByPoint = true
+                    self.delegate?.navigationMapView(self, didSelect: alternativeRoute)
+                }
+            }
+        }
+        
+        group.notify(queue: DispatchQueue.main) {
+            completion(routeFoundByPoint)
+        }
+    }
+    
+    func routeIndexFromMapQuery(with options: RenderedQueryOptions, at point: CGPoint, completion: @escaping (Int?) -> Void) {
+        mapView.mapboxMap.queryRenderedFeatures(with: [point], options: options) { result in
+            if case .success(let queriedFeatures) = result,
+               let indexValue = queriedFeatures.first?.feature.properties?["routeIndex"] as? JSONValue,
+               case .number(let routeIndex) = indexValue {
+                completion(Int(routeIndex))
+            } else {
+                completion(nil)
+            }
         }
     }
     
@@ -2221,6 +2069,8 @@ open class NavigationMapView: UIView {
      */
     private(set) var predictiveCacheManager: PredictiveCacheManager?
     
+    private var predictiveCacheMapObserver: MapboxMaps.Cancelable? = nil
+
     /**
      Setups the Predictive Caching mechanism using provided Options.
      
@@ -2229,10 +2079,26 @@ open class NavigationMapView: UIView {
      - parameter options: options, controlling caching parameters like area radius and concurrent downloading threads.
      */
     public func enablePredictiveCaching(options predictiveCacheOptions: PredictiveCacheOptions) {
-        let styleSourcePaths = mapView.styleSourceDatasets(["raster", "vector"])
-        
-        predictiveCacheManager = PredictiveCacheManager(predictiveCacheOptions: predictiveCacheOptions,
-                                                        styleSourcePaths: styleSourcePaths)
+        predictiveCacheMapObserver?.cancel()
+
+        let cacheMapOptions = createCacheMapOptions(predictiveCacheOptions: predictiveCacheOptions)
+        self.predictiveCacheManager = PredictiveCacheManager(predictiveCacheOptions: predictiveCacheOptions,
+                                                             cacheMapOptions: cacheMapOptions)
+        self.predictiveCacheMapObserver = mapView.mapboxMap?.onEvery(event: .styleLoaded) { [weak self] _ in
+            guard let self = self else { return }
+
+            let cacheMapOptions = self.createCacheMapOptions(predictiveCacheOptions: predictiveCacheOptions)
+            self.predictiveCacheManager?.updateMapControllers(cacheMapOptions: cacheMapOptions)
+        }
+    }
+
+    private func createCacheMapOptions(predictiveCacheOptions: PredictiveCacheOptions) -> PredictiveCacheManager.CacheMapOptions? {
+        let tileStore = mapTileStore ?? NavigationSettings.shared.tileStoreConfiguration.mapLocation?.tileStore
+        let mapsOptions = predictiveCacheOptions.predictiveCacheMapsOptions
+        let tilesetDescriptor = self.mapView.tilesetDescriptor(zoomRange: mapsOptions.zoomRange)
+        guard let tileStore = tileStore, let tilesetDescriptor = tilesetDescriptor else { return nil }
+
+        return (tileStore: tileStore, tilesetDescriptor: tilesetDescriptor)
     }
     
     // MARK: Interacting with Camera

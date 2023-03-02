@@ -26,6 +26,17 @@ public protocol RouterDelegate: AnyObject, UnimplementedLogging {
     func router(_ router: Router, shouldRerouteFrom location: CLLocation) -> Bool
 
     /**
+     Asks permission to proceed with found proactive reroute and apply it as main route.
+     
+     If implemented, this method is called as soon as the router detects route faster than the current one. This only happens if `Router.reroutesProactively` is set to `true` (default). Calling provided `completion` results in new route to be set, without triggering usual rerouting delegate methods.
+          
+     - parameter router: The router that has detected faster new route
+     - parameter location: The user’s current location.
+     - parameter route: The route found.
+     - parameter completion: Completion to be called to allow the router to apply a new route; Ignoring calling the completion will ignore the faster route aswell.
+     */
+    func router(_ router: Router, shouldProactivelyRerouteFrom location: CLLocation, to route: Route, completion: @escaping () -> Void)
+    /**
      Called immediately before the router calculates a new route.
 
      This method is called after `router(_:shouldRerouteFrom:)` is called, and before `router(_:modifiedOptionsForReroute:)` is called.
@@ -95,7 +106,7 @@ public protocol RouterDelegate: AnyObject, UnimplementedLogging {
      
      This method is called before updating router's main route.
      
-     - note: `LegacyRouteController` will never report alternative routes updates.
+     `LegacyRouteController` never calls this method, because it cannot generate routes on the device.
      
      - parameter router: The router that has detected turning to the alternative.
      - parameter route: The alternative route which will be taken as new main.
@@ -128,6 +139,16 @@ public protocol RouterDelegate: AnyObject, UnimplementedLogging {
      - parameter location: The user’s current location.
      */
     func router(_ router: Router, didFailToTakeAlternativeRouteAt location: CLLocation?)
+    
+    /**
+     Called when router has automatically switched to the coincide online route.
+     
+     - note: `LegacyRouteController` will never do that.
+     
+     - parameter router: The router reporting an update.
+     - parameter coincideRoute: A route taken.
+     */
+    func router(_ router: Router, didSwitchToCoincidentOnlineRoute coincideRoute: Route)
     
     /**
      Called when the router fails to receive a new route.
@@ -229,6 +250,13 @@ public extension RouterDelegate {
         return RouteController.DefaultBehavior.shouldRerouteFromLocation
     }
     
+    func router(_ router: Router, shouldProactivelyRerouteFrom location: CLLocation, to route: Route, completion: () -> Void) {
+        logUnimplemented(protocolType: RouterDelegate.self, level: .debug)
+        if RouteController.DefaultBehavior.shouldProactivelyRerouteFromLocation {
+            completion()
+        }
+    }
+    
     func router(_ router: Router, willRerouteFrom location: CLLocation) {
         logUnimplemented(protocolType: RouterDelegate.self, level: .debug)
     }
@@ -299,6 +327,10 @@ public extension RouterDelegate {
     }
     
     func router(_ router: Router, didFailToTakeAlternativeRouteAt location: CLLocation?) {
+        logUnimplemented(protocolType: RouterDelegate.self, level: .debug)
+    }
+    
+    func router(_ router: Router, didSwitchToCoincidentOnlineRoute coincideRoute: Route) {
         logUnimplemented(protocolType: RouterDelegate.self, level: .debug)
     }
 }

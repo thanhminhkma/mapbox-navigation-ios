@@ -93,7 +93,6 @@ extension VisualInstruction {
      
      - returns: An image set with light and dark versions of an image.
      */
-    @available(iOS 12.0, *)
     public func maneuverImageSet(side: DrivingSide) -> CPImageSet? {
         let colors: [UIColor] = [.black, .white]
         let maneuverIcons: [UIImage] = colors.compactMap { (color) in
@@ -106,6 +105,33 @@ extension VisualInstruction {
         // `CPImageSet` applies `lightContentImage` for dark appearance and `darkContentImage`
         // for light appearance, because of this white color is set for `lightContentImage` parameter.
         return CPImageSet(lightContentImage: maneuverIcons[1], darkContentImage: maneuverIcons[0])
+    }
+    
+    /**
+     Returns a `UIImage` representing the maneuver.
+     
+     - parameter side: Driving side of the road cars and traffic flow.
+     - parameter userInterfaceStyle: The `UIUserInterfaceStyle` that the maneuver will be displayed in.
+     
+     - returns: A `UIImage` representing the maneuver.
+     */
+    @available(iOS 13.0, *)
+    func maneuverImage(side: DrivingSide, userInterfaceStyle: UIUserInterfaceStyle) -> UIImage? {
+        let color: UIColor
+        switch userInterfaceStyle {
+        case .unspecified:
+            color = .black
+        case .light:
+            color = .black
+        case .dark:
+            color = .white
+        @unknown default:
+            Log.error("Error occured with unknown UIUserInterfaceStyle.", category: .navigationUI)
+            return nil
+        }
+        return maneuverViewImage(drivingSide: side,
+                                 color: color,
+                                 size: CGSize(width: 30, height: 30))
     }
     
     /// Returns whether the `VisualInstruction`’s maneuver image should be flipped according to the driving side.
@@ -136,7 +162,6 @@ extension VisualInstruction {
      
      - returns: An `NSAttributedString` with maneuver instructions.
      */
-    @available(iOS 12.0, *)
     public func carPlayManeuverLabelAttributedText<T: InstructionLabel>(bounds: @escaping () -> (CGRect),
                                                                         shieldHeight: CGFloat,
                                                                         window: UIWindow?,
@@ -168,7 +193,6 @@ extension VisualInstruction {
      
      - returns: Light and dark representations of an image that contains maneuver lane configuration.
      */
-    @available(iOS 12.0, *)
     public func lanesImageSet(side: DrivingSide,
                               direction: ManeuverDirection?,
                               scale: CGFloat) -> CPImageSet? {

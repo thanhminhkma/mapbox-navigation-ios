@@ -8,24 +8,12 @@ import MapboxCommon_Private
 
 #if DEBUG
 class SKUTests: TestCase {
-    private var navigator: MapboxCoreNavigation.Navigator? = nil
-
-    override func setUp() {
-        super.setUp()
-        navigator = Navigator.shared
-    }
-
-    override func tearDown() {
-        super.tearDown()
-        navigator = nil
-    }
-
     func testDirectionsSKU() {
         let expected: String = UUID().uuidString
         billingServiceMock.onGetSKUTokenIfValid = { _ in
             expected
         }
-        XCTAssertEqual(Directions.shared.skuToken, "")
+        XCTAssertNil(Directions.shared.skuToken, "Return nil sku if no started session")
         BillingHandler.shared.beginBillingSession(for: .freeDrive, uuid: .init())
         let directionsSkuToken = Directions.shared.skuToken
         
@@ -40,7 +28,7 @@ class SKUTests: TestCase {
         }
 
         let speechSynthesizer = SpeechSynthesizer(accessToken: billingServiceMock.accessToken)
-        XCTAssert(speechSynthesizer.skuToken == nil || speechSynthesizer.skuToken == "")
+        XCTAssertNil(speechSynthesizer.skuToken, "Return nil sku if no started session")
         BillingHandler.shared.beginBillingSession(for: .freeDrive, uuid: .init())
 
         let speechSkuToken = speechSynthesizer.skuToken
@@ -50,7 +38,7 @@ class SKUTests: TestCase {
 
     func testSKUTokensMatch() {
         BillingHandler.shared.beginBillingSession(for: .freeDrive, uuid: .init())
-        let skuToken = NativeBillingService.shared.getSessionSKUTokenIfValid(for: .nav2SesFDTrip)
+        let skuToken = "mocked token"
         billingServiceMock.onGetSKUTokenIfValid = { _ in skuToken }
 
         let viewController = TokenTestViewController()

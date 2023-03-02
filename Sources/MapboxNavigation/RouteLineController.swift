@@ -54,6 +54,10 @@ extension NavigationMapView {
             if annotatesSpokenInstructions {
                 navigationMapView.showVoiceInstructionsOnMap(route: router.route)
             }
+            
+            if annotatesIntersections {
+                navigationMapView.updateIntersectionAnnotations(with: router.routeProgress)
+            }
         }
         
         func navigationViewDidAppear(_ animated: Bool) {
@@ -64,6 +68,14 @@ extension NavigationMapView {
         // MARK: NavigationComponent implementation
         
         func navigationService(_ service: NavigationService, didRerouteAlong route: Route, at location: CLLocation?, proactive: Bool) {
+            handleReroute()
+        }
+        
+        func navigationService(_ service: NavigationService, didSwitchToCoincidentOnlineRoute coincideRoute: Route) {
+            handleReroute()
+        }
+        
+        private func handleReroute() {
             currentStepIndexMapped = 0
             let route = router.route
             let stepIndex = router.routeProgress.currentLegProgress.stepIndex
@@ -73,12 +85,16 @@ extension NavigationMapView {
             
             navigationMapView.addArrow(route: route, legIndex: legIndex, stepIndex: stepIndex + 1)
             navigationMapView.updateRouteLine(routeProgress: router.routeProgress,
-                                              coordinate: location?.coordinate,
+                                              coordinate: router.location?.coordinate,
                                               shouldRedraw: true)
             navigationMapView.showWaypoints(on: route)
             
             if annotatesSpokenInstructions {
                 navigationMapView.showVoiceInstructionsOnMap(route: route)
+            }
+            
+            if annotatesIntersections {
+                navigationMapView.updateIntersectionAnnotations(with: router.routeProgress)
             }
         }
         
@@ -101,6 +117,10 @@ extension NavigationMapView {
                 navigationMapView.showVoiceInstructionsOnMap(route: route)
             }
             
+            if annotatesIntersections {
+                navigationMapView.updateIntersectionAnnotations(with: progress)
+            }
+            
             navigationMapView.updateRouteLine(routeProgress: progress, coordinate: location.coordinate, shouldRedraw: currentLegIndexMapped != legIndex)
             currentLegIndexMapped = legIndex
         }
@@ -119,6 +139,7 @@ extension NavigationMapView {
         // MARK: Annotations Overlay
         
         var annotatesSpokenInstructions = false
+        var annotatesIntersections: Bool = true
         
         private var currentLegIndexMapped = 0
         private var currentStepIndexMapped = 0

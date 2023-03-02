@@ -80,3 +80,8 @@ open class DistanceRemainingLabel: StylableLabel {
 open class ArrivalTimeLabel: StylableLabel {
     
 }
+
+// :nodoc:
+public class DestinationLabel: StylableLabel {
+    
+}

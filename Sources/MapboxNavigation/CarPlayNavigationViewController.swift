@@ -2,8 +2,6 @@ import Foundation
 import MapboxDirections
 import MapboxCoreNavigation
 @_spi(Restricted) import MapboxMaps
-
-#if canImport(CarPlay)
 import CarPlay
 
 let CarPlayAlternativeIDKey: String = "MBCarPlayAlternativeID"
@@ -13,7 +11,6 @@ let CarPlayAlternativeIDKey: String = "MBCarPlayAlternativeID"
  
  - seealso: `NavigationViewController`
  */
-@available(iOS 12.0, *)
 open class CarPlayNavigationViewController: UIViewController, BuildingHighlighting {
     
     // MARK: Child Views and Styling Configuration
@@ -77,6 +74,19 @@ open class CarPlayNavigationViewController: UIViewController, BuildingHighlighti
     public var showsContinuousAlternatives: Bool = true {
         didSet {
             updateContinuousAlternatives()
+        }
+    }
+    
+    /**
+     A Boolean value that determines whether the map annotates the intersections on current step during active navigation.
+     
+     If `true`, the map would display an icon of a traffic control device on the intersection,
+     such as traffic signal, stop sign, yield sign, or railroad crossing.
+     Defaults to `true`.
+     */
+    public var annotatesIntersectionsAlongRoute: Bool = true {
+        didSet {
+            updateIntersectionsAlongRoute()
         }
     }
     
@@ -777,8 +787,13 @@ open class CarPlayNavigationViewController: UIViewController, BuildingHighlighti
             navigationMapView?.showWaypoints(on: routeProgress.route, legIndex: legIndex)
         }
         
+        if annotatesIntersectionsAlongRoute {
+            navigationMapView?.updateIntersectionAnnotations(with: routeProgress)
+        }
+        
         navigationMapView?.updateRouteLine(routeProgress: routeProgress, coordinate: location.coordinate, shouldRedraw: legIndex != currentLegIndexMapped)
         currentLegIndexMapped = legIndex
+        
     }
     
     private func checkTunnelState(at location: CLLocation, along progress: RouteProgress) {
@@ -841,10 +856,10 @@ open class CarPlayNavigationViewController: UIViewController, BuildingHighlighti
     }
     
     @objc func didUpdateRoadNameFromStatus(_ notification: Notification) {
-        let roadNameFromStatus = notification.userInfo?[RouteController.NotificationUserInfoKey.roadNameKey] as? String
+        let roadNameFromStatus = notification.userInfo?[RouteController.NotificationUserInfoKey.localizedRoadNameKey] as? String
         if let roadName = roadNameFromStatus?.nonEmptyString {
             let representation = notification.userInfo?[RouteController.NotificationUserInfoKey.routeShieldRepresentationKey] as? VisualInstruction.Component.ImageRepresentation
-            wayNameView.label.updateRoad(roadName: roadName, representation: representation)
+            wayNameView.label.updateRoad(roadName: roadName, representation: representation, idiom: .carPlay)
             wayNameView.containerView.isHidden = false
         } else {
             wayNameView.text = nil
@@ -872,6 +887,10 @@ open class CarPlayNavigationViewController: UIViewController, BuildingHighlighti
             navigationMapView?.removeArrow()
         }
         navigationMapView?.showWaypoints(on: progress.route, legIndex: legIndex)
+        
+        if annotatesIntersectionsAlongRoute {
+            navigationMapView?.updateIntersectionAnnotations(with: progress)
+        }
     }
     
     func updateManeuvers(_ routeProgress: RouteProgress) {
@@ -889,7 +908,17 @@ open class CarPlayNavigationViewController: UIViewController, BuildingHighlighti
         primaryManeuver.instructionVariants = [text]
         
         // Add maneuver arrow
-        primaryManeuver.symbolSet = visualInstruction.primaryInstruction.maneuverImageSet(side: visualInstruction.drivingSide)
+        if #available(iOS 13.0, *) {
+            let userInterfaceStyle = traitCollection.userInterfaceStyle
+            primaryManeuver.symbolImage = visualInstruction.primaryInstruction.maneuverImage(side: visualInstruction.drivingSide,
+                                                                                             userInterfaceStyle: userInterfaceStyle)
+        } else {
+            primaryManeuver.symbolSet = visualInstruction.primaryInstruction.maneuverImageSet(side: visualInstruction.drivingSide)
+        }
+        
+        let junctionImage = guidanceViewManeuverRepresentation(for: visualInstruction,
+                                                               navigationService: navigationService)
+        primaryManeuver.junctionImage = junctionImage
         
         // Estimating the width of Apple's maneuver view
         let bounds: () -> (CGRect) = {
@@ -981,6 +1010,42 @@ open class CarPlayNavigationViewController: UIViewController, BuildingHighlighti
         carSession.upcomingManeuvers = maneuvers
     }
     
+    /**
+     Returns guidance view image representation if it's present in the current visual instruction.
+     Since CarPlay doesn't support asynchronous maneuvers update, in case if guidance view image is
+     not present in cache - download guidance image first and after that trigger maneuvers update.
+     In case if image is present in cache - update primary maneuver right away.
+     */
+    func guidanceViewManeuverRepresentation(for visualInstruction: VisualInstructionBanner?,
+                                            navigationService: NavigationService) -> UIImage? {
+        guard let quaternaryInstruction = visualInstruction?.quaternaryInstruction,
+              let guidanceView = quaternaryInstruction.components.first,
+              let cacheKey = guidanceView.cacheKey else {
+            return nil
+        }
+        
+        if let cachedImage = ImageRepository.shared.cachedImageForKey(cacheKey) {
+            return cachedImage
+        } else {
+            guard case let .guidanceView(guidanceViewImageRepresentation, _) = guidanceView,
+                  let guidanceImageURL = guidanceViewImageRepresentation.imageURL,
+                  let accessToken = navigationService.credentials.accessToken,
+                  let guidanceViewImageURL = URL(string: guidanceImageURL.absoluteString + "&access_token=" + accessToken) else {
+                return nil
+            }
+            
+            ImageRepository.shared.imageWithURL(guidanceViewImageURL,
+                                                cacheKey: cacheKey) { [weak self] _ in
+                DispatchQueue.main.async {
+                    guard let self = self else { return }
+                    self.updateManeuvers(navigationService.routeProgress)
+                }
+            }
+            
+            return nil
+        }
+    }
+    
     func presentWaypointArrivalUI(for waypoint: Waypoint) {
         var title = NSLocalizedString("CARPLAY_ARRIVED",
                                       bundle: .mapboxNavigation,
@@ -1007,11 +1072,19 @@ open class CarPlayNavigationViewController: UIViewController, BuildingHighlighti
         carInterfaceController.dismissTemplate(animated: true)
         carInterfaceController.presentTemplate(waypointArrival, animated: true)
     }
+    
+    func updateIntersectionsAlongRoute() {
+        if annotatesIntersectionsAlongRoute {
+            navigationMapView?.updateIntersectionSymbolImages(styleType: styleManager?.currentStyleType)
+            navigationMapView?.updateIntersectionAnnotations(with: navigationService.routeProgress)
+        } else {
+            navigationMapView?.removeIntersectionAnnotations()
+        }
+    }
 }
 
 // MARK: StyleManagerDelegate Methods
 
-@available(iOS 12.0, *)
 extension CarPlayNavigationViewController: StyleManagerDelegate {
     
     public func location(for styleManager: StyleManager) -> CLLocation? {
@@ -1026,15 +1099,15 @@ extension CarPlayNavigationViewController: StyleManagerDelegate {
     
     public func styleManager(_ styleManager: StyleManager, didApply style: Style) {
         let mapboxMapStyle = navigationMapView?.mapView.mapboxMap.style
+        let styleURI = StyleURI(url: style.mapStyleURL)
         if mapboxMapStyle?.uri?.rawValue != style.mapStyleURL.absoluteString {
-            let styleURI = StyleURI(url: style.mapStyleURL)
             mapboxMapStyle?.uri = styleURI
-            // Update the sprite repository of wayNameView when map style changes.
-            wayNameView?.label.updateStyle(styleURI: styleURI)
         }
         
+        wayNameView?.label.updateStyle(styleURI: styleURI, idiom: .carPlay)
         updateMapTemplateStyle()
         updateManeuvers(navigationService.routeProgress)
+        updateIntersectionsAlongRoute()
     }
     
     public func styleManagerDidRefreshAppearance(_ styleManager: StyleManager) {
@@ -1056,7 +1129,6 @@ extension CarPlayNavigationViewController: StyleManagerDelegate {
 
 // MARK: NavigationServiceDelegate Methods
 
-@available(iOS 12.0, *)
 extension CarPlayNavigationViewController: NavigationServiceDelegate {
     
     public func navigationService(_ service: NavigationService, didArriveAt waypoint: Waypoint) -> Bool {
@@ -1073,7 +1145,6 @@ extension CarPlayNavigationViewController: NavigationServiceDelegate {
 
 // MARK: NavigationMapViewDelegate Methods
 
-@available(iOS 12.0, *)
 extension CarPlayNavigationViewController: NavigationMapViewDelegate {
     
     public func navigationMapView(_ navigationMapView: NavigationMapView,
@@ -1099,9 +1170,20 @@ extension CarPlayNavigationViewController: NavigationMapViewDelegate {
                                                          routeCasingLineLayerWithIdentifier: identifier,
                                                          sourceIdentifier: sourceIdentifier)
     }
+    
+    public func navigationMapView(_ navigationMapView: NavigationMapView,
+                                  routeRestrictedAreasLineLayerWithIdentifier identifier: String,
+                                  sourceIdentifier: String) -> LineLayer? {
+        return delegate?.carPlayNavigationViewController(self,
+                                                         routeRestrictedAreasLineLayerWithIdentifier: identifier,
+                                                         sourceIdentifier: sourceIdentifier)
+    }
+    
+    public func navigationMapView(_ navigationMapView: NavigationMapView, willAdd layer: Layer) -> Layer? {
+        return delegate?.carPlayNavigationViewController(self, willAdd: layer)
+    }
 }
 
-@available(iOS 12.0, *)
 extension CarPlayNavigationViewController: CPSessionConfigurationDelegate {
     
     @available(iOS 13.0, *)
@@ -1111,12 +1193,11 @@ extension CarPlayNavigationViewController: CPSessionConfigurationDelegate {
     }
 }
 
-@available(iOS 12.0, *)
 extension CarPlayNavigationViewController: CPListTemplateDelegate {
     
     public func listTemplate(_ listTemplate: CPListTemplate,
-                      didSelect item: CPListItem,
-                      completionHandler: @escaping () -> Void) {
+                             didSelect item: CPListItem,
+                             completionHandler: @escaping () -> Void) {
         // Selected a list item for switching to alternative route.
         guard let userInfo = item.userInfo as? CarPlayUserInfo,
               let alternativeId = userInfo[CarPlayAlternativeIDKey] as? AlternativeRoute.ID,
@@ -1133,5 +1214,3 @@ extension CarPlayNavigationViewController: CPListTemplateDelegate {
         })
     }
 }
-
-#endif

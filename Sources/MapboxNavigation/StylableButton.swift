@@ -60,3 +60,18 @@ open class CancelButton: Button {
 open class DismissButton: Button {
     
 }
+
+// :nodoc:
+public class BackButton: Button {
+    
+}
+
+// :nodoc:
+public class PreviewButton: Button {
+    
+}
+
+// :nodoc:
+public class StartButton: Button {
+    
+}

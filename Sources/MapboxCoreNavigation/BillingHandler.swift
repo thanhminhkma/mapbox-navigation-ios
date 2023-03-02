@@ -83,6 +83,7 @@ private final class ProductionBillingService: BillingService {
     func beginBillingSession(for sessionType: BillingHandler.SessionType,
                              onError: @escaping (BillingServiceError) -> Void) {
         let skuToken = tripSku(for: sessionType)
+        Log.info("\(sessionType) billing session starts", category: .billing)
         NativeBillingService.shared.beginBillingSession(forAccessToken: accessToken,
                                                                userAgent: userAgent,
                                                                skuIdentifier: skuToken,
@@ -93,12 +94,14 @@ private final class ProductionBillingService: BillingService {
 
     func pauseBillingSession(for sessionType: BillingHandler.SessionType) {
         let skuToken = tripSku(for: sessionType)
+        Log.info("\(sessionType) billing session pauses", category: .billing)
         NativeBillingService.shared.pauseBillingSession(for: skuToken)
     }
 
     func resumeBillingSession(for sessionType: BillingHandler.SessionType,
                               onError: @escaping (BillingServiceError) -> Void) {
         let skuToken = tripSku(for: sessionType)
+        Log.info("\(sessionType) billing session resumes", category: .billing)
         NativeBillingService.shared.resumeBillingSession(for: skuToken) { nativeBillingServiceError in
             onError(BillingServiceError(nativeBillingServiceError))
         }
@@ -106,6 +109,7 @@ private final class ProductionBillingService: BillingService {
 
     func stopBillingSession(for sessionType: BillingHandler.SessionType) {
         let skuToken = tripSku(for: sessionType)
+        Log.info("\(sessionType) billing session stops", category: .billing)
         NativeBillingService.shared.stopBillingSession(for: skuToken)
     }
 
@@ -165,7 +169,7 @@ final class BillingHandler {
     }
 
     /// Supported session types.
-    enum SessionType: Equatable {
+    enum SessionType: Equatable, CustomStringConvertible {
         case freeDrive
         case activeGuidance
 
@@ -175,6 +179,15 @@ final class BillingHandler {
                 return 43200 /*12h*/
             case .freeDrive:
                 return 3600 /*1h*/
+            }
+        }
+
+        var description: String {
+            switch self {
+            case .activeGuidance:
+                return "Active Guidance"
+            case .freeDrive:
+                return "Free Drive"
             }
         }
     }
@@ -191,8 +204,9 @@ final class BillingHandler {
     /// The billing service which is used to send billing events.
     private let billingService: BillingService
 
-    private var navigator: Navigator {
-        .shared
+    private let navigatorType: CoreNavigator.Type
+    private var navigator: CoreNavigator {
+        return navigatorType.shared
     }
 
     /**
@@ -252,8 +266,10 @@ final class BillingHandler {
         billingService.accessToken
     }
 
-    private init(service: BillingService) {
+    private init(service: BillingService,
+                 navigatorType: CoreNavigator.Type = Navigator.self) {
         self.billingService = service
+        self.navigatorType = navigatorType
     }
 
     /**
@@ -455,7 +471,7 @@ final class BillingHandler {
         let hasRunningSession = _sessions.values.contains { !$0.isPaused }
         lock.unlock()
 
-        if Navigator.isSharedInstanceCreated {
+        if navigatorType.isSharedInstanceCreated {
             if hasRunningSession {
                 navigator.resume()
             }
@@ -469,8 +485,9 @@ final class BillingHandler {
 // MARK: - Tests Support
 
 extension BillingHandler {
-    static func __createMockedHandler(with service: BillingService) -> BillingHandler {
-        BillingHandler(service: service)
+    static func __createMockedHandler(with service: BillingService,
+                                      navigatorType: CoreNavigator.Type = Navigator.self) -> BillingHandler {
+        BillingHandler(service: service, navigatorType: navigatorType)
     }
 
     static func __replaceSharedInstance(with handler: BillingHandler) {

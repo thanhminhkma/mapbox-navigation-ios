@@ -216,6 +216,10 @@ class MapboxNavigationTests: XCTestCase {
         wait()
         assertImageSnapshot(matching: UIImageView(image: navigationMapView.snapshot()), as: .image(precision: 0.95))
         
+        navigationMapView.reducedAccuracyActivatedMode = true
+        wait()
+        assertImageSnapshot(matching: UIImageView(image: navigationMapView.snapshot()), as: .image(precision: 0.95))
+        
         navigationMapView.accuracyAuthorization = .fullAccuracy
         let userPuckCourseView = UserPuckCourseView(frame: .init(origin: .zero, size: .init(width: 50.0, height: 50.0)))
         userPuckCourseView.fillColor = .red
@@ -256,6 +260,8 @@ class MapboxNavigationTests: XCTestCase {
         ]
         var routeName = "two_routes"
         var routes = self.routes(for: coordinates, routeName: routeName)
+        var routeResponse = IndexedRouteResponse(routeResponse: self.routeResponse(for: coordinates, routeName: routeName),
+                                                 routeIndex: 0)
         guard let firstRoute = routes.first,
               let centerCoordinate = routes.first?.shape?.coordinates.centerCoordinate else {
             XCTFail("Data should be valid.")
@@ -272,6 +278,17 @@ class MapboxNavigationTests: XCTestCase {
         wait()
         assertImageSnapshot(matching: UIImageView(image: navigationMapView.snapshot()), as: .image(precision: 0.95))
         
+        navigationMapView.mapView.mapboxMap.setCamera(to: CameraOptions(center: centerCoordinate))
+        navigationMapView.show(routeResponse)
+        navigationMapView.showWaypoints(on: firstRoute)
+        wait()
+        assertImageSnapshot(matching: UIImageView(image: navigationMapView.snapshot()), as: .image(precision: 0.95))
+        
+        navigationMapView.removeRoutes()
+        navigationMapView.removeWaypoints()
+        wait()
+        assertImageSnapshot(matching: UIImageView(image: navigationMapView.snapshot()), as: .image(precision: 0.95))
+        
         coordinates = [
             CLLocationCoordinate2DMake(37.766786656393464, -122.41803651931673),
             CLLocationCoordinate2DMake(37.76850632569678, -122.41628613127037),
@@ -279,6 +296,8 @@ class MapboxNavigationTests: XCTestCase {
         ]
         routeName = "two_routes_with_two_legs"
         routes = self.routes(for: coordinates, routeName: routeName)
+        routeResponse = IndexedRouteResponse(routeResponse: self.routeResponse(for: coordinates, routeName: routeName),
+                                                 routeIndex: 0)
         guard let firstRoute = routes.first else {
             XCTFail("Data should be valid.")
             return
@@ -293,6 +312,83 @@ class MapboxNavigationTests: XCTestCase {
         navigationMapView.removeWaypoints()
         wait()
         assertImageSnapshot(matching: UIImageView(image: navigationMapView.snapshot()), as: .image(precision: 0.95))
+        
+        navigationMapView.mapView.mapboxMap.setCamera(to: CameraOptions(center: centerCoordinate))
+        navigationMapView.show(routeResponse)
+        navigationMapView.showWaypoints(on: firstRoute)
+        wait()
+        assertImageSnapshot(matching: UIImageView(image: navigationMapView.snapshot()), as: .image(precision: 0.95))
+        
+        navigationMapView.removeRoutes()
+        navigationMapView.removeWaypoints()
+        wait()
+        assertImageSnapshot(matching: UIImageView(image: navigationMapView.snapshot()), as: .image(precision: 0.95))
+    }
+    
+    func testMultiLegRouteWithoutCongestion() {
+        navigationMapView._locationChangesAllowed = false
+        navigationMapView.authorizationStatus = .denied
+        navigationMapView.userLocationStyle = nil
+        
+        let timeout: TimeInterval = 2.0
+        let styleLoadedExpectation = XCTestExpectation(description: "Style loaded expectation.")
+        navigationMapView.mapView.mapboxMap.onNext(event: .styleLoaded) { _ in
+            styleLoadedExpectation.fulfill()
+        }
+        wait(for: [styleLoadedExpectation], timeout: timeout)
+        
+        navigationMapView.mapView.mapboxMap.setCamera(to: CameraOptions(center: CLLocationCoordinate2D(latitude: 37.768506, longitude: -122.416286),
+                                                                        zoom: 15.0,
+                                                                        bearing: 0.0,
+                                                                        pitch: 0.0))
+        
+        let mapLoadedExpectation = XCTestExpectation(description: "Map loaded expectation.")
+        navigationMapView.mapView.mapboxMap.onNext(event: .mapLoaded) { _ in
+            mapLoadedExpectation.fulfill()
+        }
+        wait(for: [mapLoadedExpectation], timeout: timeout)
+        
+        let coordinates = [
+            CLLocationCoordinate2DMake(37.766786656393464, -122.41803651931673),
+            CLLocationCoordinate2DMake(37.76850632569678, -122.41628613127037),
+            CLLocationCoordinate2DMake(37.768650567520595, -122.41376775457874)
+        ]
+        let routeName = "two_routes_with_two_legs"
+        let routes = routes(for: coordinates, routeName: routeName)
+        guard let firstRoute = routes.first else {
+            XCTFail("Route should be valid.")
+            return
+        }
+
+        XCTAssertEqual(firstRoute.legs.count, 2)
+        firstRoute.legs.first?.attributes.segmentNumericCongestionLevels = nil
+        firstRoute.legs.first?.attributes.segmentCongestionLevels = nil
+        firstRoute.legs.last?.attributes.segmentNumericCongestionLevels = nil
+        firstRoute.legs.last?.attributes.segmentCongestionLevels = nil
+        
+        XCTAssertNil(firstRoute.legs.first?.resolvedCongestionLevels)
+        XCTAssertNil(firstRoute.legs.last?.resolvedCongestionLevels)
+        
+        navigationMapView.show([firstRoute], legIndex: 0)
+        navigationMapView.showWaypoints(on: firstRoute)
+        wait()
+        assertImageSnapshot(matching: UIImageView(image: navigationMapView.snapshot()), as: .image(precision: 0.95))
+    }
+    
+    func routeResponse(for coordinates: [CLLocationCoordinate2D], routeName: String) -> RouteResponse {
+        let navigationRouteOptions = NavigationRouteOptions(coordinates: coordinates)
+        
+        let decoder = JSONDecoder()
+        decoder.userInfo[.options] = navigationRouteOptions
+        
+        let data = JSONFromFile(name: routeName)
+        
+        let routes = try? decoder.decode([Route].self, from: data)
+        return RouteResponse(httpResponse: nil,
+                             routes: routes,
+                             waypoints: navigationRouteOptions.waypoints,
+                             options: .route(navigationRouteOptions),
+                             credentials: Credentials())
     }
     
     func routes(for coordinates: [CLLocationCoordinate2D], routeName: String) -> [Route] {

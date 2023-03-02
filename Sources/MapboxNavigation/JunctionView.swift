@@ -71,9 +71,6 @@ public class JunctionView: UIImageView {
                     DispatchQueue.main.async {
                         guard let self = self else { return }
                         
-                        self.isCurrentlyVisible = true
-                        self.isHidden = !self.isCurrentlyVisible
-                        
                         self.image = downloadedImage
                         self.show(animated: true)
                     }

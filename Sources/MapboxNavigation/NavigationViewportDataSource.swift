@@ -179,8 +179,13 @@ public class NavigationViewportDataSource: ViewportDataSource {
             }
             
             if followingCameraOptions.bearingUpdatesAllowed || followingMobileCamera.bearing == nil {
-                followingMobileCamera.bearing = 0.0
-                followingCarPlayCamera.bearing = 0.0
+                if followingCameraOptions.followsLocationCourse {
+                    followingMobileCamera.bearing = location.course
+                    followingCarPlayCamera.bearing = location.course
+                } else {
+                    followingMobileCamera.bearing = 0.0
+                    followingCarPlayCamera.bearing = 0.0
+                }
             }
             
             followingMobileCamera.anchor = mapView.center
@@ -215,7 +220,7 @@ public class NavigationViewportDataSource: ViewportDataSource {
                 let nextStepIndex = min(stepIndex + 1, routeProgress.currentLeg.steps.count - 1)
                 
                 var totalDistance: CLLocationDistance = 0.0
-                for (index, step) in routeProgress.currentLeg.steps.suffix(from: nextStepIndex).enumerated() {
+                for (index, step) in routeProgress.currentLeg.steps.dropFirst(nextStepIndex).enumerated() {
                     guard let stepCoordinates = step.shape?.coordinates,
                           let distance = stepCoordinates.distance() else { continue }
                     
@@ -243,7 +248,7 @@ public class NavigationViewportDataSource: ViewportDataSource {
             }
             
             let coordinatesForManeuverFraming = compoundManeuvers.reduce([], +)
-            let coordinatesToManeuver = routeProgress.currentLegProgress.currentStep.shape?.coordinates.sliced(from: location.coordinate) ?? []
+            let coordinatesToManeuver = routeProgress.currentLegProgress.currentStepProgress.remainingStepCoordinates()
             
             if options.followingCameraOptions.centerUpdatesAllowed || followingMobileCamera.center == nil {
                 var center = location.coordinate
@@ -340,13 +345,13 @@ public class NavigationViewportDataSource: ViewportDataSource {
             if options.followingCameraOptions.paddingUpdatesAllowed || followingMobileCamera.padding == nil {
                 followingMobileCamera.padding = UIEdgeInsets(top: followingMobileCameraAnchor.y,
                                                              left: viewportPadding.left,
-                                                             bottom: UIScreen.main.bounds.height - followingMobileCameraAnchor.y + 1.0,
+                                                             bottom: mapView.bounds.height - followingMobileCameraAnchor.y + 1.0,
                                                              right: viewportPadding.right)
                 
-                if let mainCarPlayScreen = UIScreen.mainCarPlay {
+                if mapView.window?.screen.traitCollection.userInterfaceIdiom == .carPlay {
                     followingCarPlayCamera.padding = UIEdgeInsets(top: followingCarPlayCameraAnchor.y,
                                                                   left: carPlayCameraPadding.left,
-                                                                  bottom: mainCarPlayScreen.bounds.height - followingCarPlayCameraAnchor.y + 1.0,
+                                                                  bottom: mapView.bounds.height - followingCarPlayCameraAnchor.y + 1.0,
                                                                   right: carPlayCameraPadding.right)
                 } else {
                     followingCarPlayCamera.padding = carPlayCameraPadding
@@ -357,14 +362,13 @@ public class NavigationViewportDataSource: ViewportDataSource {
     
     func updateOverviewCamera(_ activeLocation: CLLocation?, routeProgress: RouteProgress?) {
         guard let mapView = mapView,
-              let coordinate = activeLocation?.coordinate,
               let routeProgress = routeProgress else { return }
         
         let stepIndex = routeProgress.currentLegProgress.stepIndex
         let nextStepIndex = min(stepIndex + 1, routeProgress.currentLeg.steps.count - 1)
         let coordinatesAfterCurrentStep = routeProgress.currentLeg.steps[nextStepIndex...]
             .map({ $0.shape?.coordinates })
-        let untraveledCoordinatesOnCurrentStep = routeProgress.currentLegProgress.currentStep.shape?.coordinates.sliced(from: coordinate) ?? []
+        let untraveledCoordinatesOnCurrentStep = routeProgress.currentLegProgress.currentStepProgress.remainingStepCoordinates()
         let remainingCoordinatesOnRoute = coordinatesAfterCurrentStep.flatten() + untraveledCoordinatesOnCurrentStep
         let carPlayCameraPadding = mapView.safeArea + UIEdgeInsets.centerEdgeInsets
         let overviewCameraOptions = options.overviewCameraOptions
@@ -499,10 +503,9 @@ public class NavigationViewportDataSource: ViewportDataSource {
                     shouldIgnoreManeuver = true
                 }
             }
-            
-            let coordinatesToManeuver = routeProgress.currentLegProgress.currentStep.shape?.coordinates.sliced(from: currentCoordinate) ?? []
-            if let distanceToManeuver = LineString(coordinatesToManeuver).distance(),
-               distanceToManeuver <= pitchNearManeuver.triggerDistanceToManeuver,
+
+            let distanceToManeuver = routeProgress.currentLegProgress.currentStepProgress.distanceRemaining
+            if distanceToManeuver <= pitchNearManeuver.triggerDistanceToManeuver,
                !shouldIgnoreManeuver {
                 return min(distanceToManeuver, pitchNearManeuver.triggerDistanceToManeuver) / pitchNearManeuver.triggerDistanceToManeuver
             }

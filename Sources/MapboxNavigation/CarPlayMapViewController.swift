@@ -2,14 +2,13 @@ import Foundation
 @_spi(Restricted) import MapboxMaps
 import MapboxCoreNavigation
 import MapboxDirections
-
-#if canImport(CarPlay)
 import CarPlay
 
 /**
  `CarPlayMapViewController` is responsible for administering the Mapbox map, the interface styles and the map template buttons to display on CarPlay.
+
+ - important: Loading `CarPlayMapViewController` view will start a Free Drive session by default. You can change default behavior using `CarPlayMapViewController.startFreeDriveAutomatically` property. For more information, see the “[Pricing](https://docs.mapbox.com/ios/beta/navigation/guides/pricing/)” guide.
  */
-@available(iOS 12.0, *)
 open class CarPlayMapViewController: UIViewController {
     
     // MARK: UI Elements Configuration
@@ -66,6 +65,12 @@ open class CarPlayMapViewController: UIViewController {
             return self.view as! NavigationMapView
         }
     }
+
+    /// Controls whether `CarPlayMapViewController` starts a Free Drive session automatically on map load.
+    ///
+    /// If you set this property to false, you can start a Free Drive session using
+    /// `CarPlayMapViewController.startFreeDriveNavigation()` method.
+    public var startFreeDriveAutomatically: Bool = true
     
     // MARK: Bar Buttons Configuration
     
@@ -273,8 +278,18 @@ open class CarPlayMapViewController: UIViewController {
         
         self.wayNameView = wayNameView
     }
-    
-    func setupPassiveLocationProvider() {
+
+    /// Starts a Free Drive session if it is not started already.
+    ///
+    /// Free Drive session starts automatically on map load by default. You can change this behavior using
+    /// `CarPlayMapViewController.startFreeDriveAutomatically` method.
+    ///
+    /// - note: Paused Free Drive sessions are not resumed by this method.
+    public func startFreeDriveNavigation() {
+        guard !(navigationMapView.mapView.location.locationProvider is PassiveLocationProvider) else {
+            return // free drive already setup
+        }
+
         let passiveLocationManager = PassiveLocationManager()
         let passiveLocationProvider = PassiveLocationProvider(locationManager: passiveLocationManager)
         navigationMapView.mapView.location.overrideLocationProvider(with: passiveLocationProvider)
@@ -301,10 +316,10 @@ open class CarPlayMapViewController: UIViewController {
         speedLimitView.signStandard = notification.userInfo?[PassiveLocationManager.NotificationUserInfoKey.signStandardKey] as? SignStandard
         speedLimitView.speedLimit = notification.userInfo?[PassiveLocationManager.NotificationUserInfoKey.speedLimitKey] as? Measurement<UnitSpeed>
         
-        let roadNameFromStatus = notification.userInfo?[PassiveLocationManager.NotificationUserInfoKey.roadNameKey] as? String
+        let roadNameFromStatus = notification.userInfo?[PassiveLocationManager.NotificationUserInfoKey.localizedRoadNameKey] as? String
         if let roadName = roadNameFromStatus?.nonEmptyString {
             let representation = notification.userInfo?[PassiveLocationManager.NotificationUserInfoKey.routeShieldRepresentationKey] as? VisualInstruction.Component.ImageRepresentation
-            wayNameView.label.updateRoad(roadName: roadName, representation: representation)
+            wayNameView.label.updateRoad(roadName: roadName, representation: representation, idiom: .carPlay)
             wayNameView.containerView.isHidden = false
         } else {
             wayNameView.text = nil
@@ -322,7 +337,9 @@ open class CarPlayMapViewController: UIViewController {
     
     public override func loadView() {
         setupNavigationMapView()
-        setupPassiveLocationProvider()
+        if startFreeDriveAutomatically {
+            startFreeDriveNavigation()
+        }
     }
     
     public override func viewDidLoad() {
@@ -331,7 +348,6 @@ open class CarPlayMapViewController: UIViewController {
         setupStyleManager()
         setupSpeedLimitView()
         setupWayNameView()
-        navigationMapView.navigationCamera.follow()
     }
     
     open override func viewWillAppear(_ animated: Bool) {
@@ -340,6 +356,14 @@ open class CarPlayMapViewController: UIViewController {
         if #available(iOS 13.0, *) {
             applyStyleIfNeeded(sessionConfiguration.contentStyle)
         }
+    }
+    
+    open override func viewDidAppear(_ animated: Bool) {
+        super.viewDidAppear(animated)
+        
+        // Whenever `CarPlayMapViewController` appears on a screen - switch camera to the following
+        // mode.
+        navigationMapView.navigationCamera.follow()
     }
     
     @available(iOS 13.0, *)
@@ -357,8 +381,7 @@ open class CarPlayMapViewController: UIViewController {
         // Trigger update of view constraints to correctly position views like `SpeedLimitView`.
         view.setNeedsUpdateConstraints()
         
-        guard let activeRoute = navigationMapView.routes?.first else {
-            navigationMapView.navigationCamera.follow()
+        guard let routes = navigationMapView.routes, !routes.isEmpty else {
             return
         }
         
@@ -367,7 +390,7 @@ open class CarPlayMapViewController: UIViewController {
             cameraOptions.pitch = 0
             navigationMapView.mapView.mapboxMap.setCamera(to: cameraOptions)
             
-            navigationMapView.fitCamera(to: [activeRoute])
+            navigationMapView.fitCamera(to: routes)
         }
     }
     
@@ -386,7 +409,6 @@ open class CarPlayMapViewController: UIViewController {
 
 // MARK: StyleManagerDelegate Methods
 
-@available(iOS 12.0, *)
 extension CarPlayMapViewController: StyleManagerDelegate {
     
     public func location(for styleManager: StyleManager) -> CLLocation? {
@@ -402,12 +424,12 @@ extension CarPlayMapViewController: StyleManagerDelegate {
     
     public func styleManager(_ styleManager: StyleManager, didApply style: Style) {
         let mapboxMapStyle = navigationMapView.mapView.mapboxMap.style
+        let styleURI = StyleURI(url: style.mapStyleURL)
         if mapboxMapStyle.uri?.rawValue != style.mapStyleURL.absoluteString {
-            let styleURI = StyleURI(url: style.mapStyleURL)
             mapboxMapStyle.uri = styleURI
-            // Update the sprite repository of wayNameView when map style changes.
-            wayNameView?.label.updateStyle(styleURI: styleURI)
         }
+        
+        wayNameView?.label.updateStyle(styleURI: styleURI, idiom: .carPlay)
     }
     
     public func styleManagerDidRefreshAppearance(_ styleManager: StyleManager) {
@@ -420,7 +442,6 @@ extension CarPlayMapViewController: StyleManagerDelegate {
 
 // MARK: NavigationMapViewDelegate Methods
 
-@available(iOS 12.0, *)
 extension CarPlayMapViewController: NavigationMapViewDelegate {
     
     public func navigationMapView(_ navigationMapView: NavigationMapView,
@@ -446,9 +467,20 @@ extension CarPlayMapViewController: NavigationMapViewDelegate {
                                            routeCasingLineLayerWithIdentifier: identifier,
                                            sourceIdentifier: sourceIdentifier)
     }
+    
+    public func navigationMapView(_ navigationMapView: NavigationMapView,
+                                  routeRestrictedAreasLineLayerWithIdentifier identifier: String,
+                                  sourceIdentifier: String) -> LineLayer? {
+        delegate?.carPlayMapViewController(self,
+                                           routeRestrictedAreasLineLayerWithIdentifier: identifier,
+                                           sourceIdentifier: sourceIdentifier)
+    }
+    
+    public func navigationMapView(_ navigationMapView: NavigationMapView, willAdd layer: Layer) -> Layer? {
+        delegate?.carPlayMapViewController(self, willAdd: layer)
+    }
 }
 
-@available(iOS 12.0, *)
 extension CarPlayMapViewController: CPSessionConfigurationDelegate {
     
     @available(iOS 13.0, *)
@@ -457,4 +489,3 @@ extension CarPlayMapViewController: CPSessionConfigurationDelegate {
         applyStyleIfNeeded(contentStyle)
     }
 }
-#endif

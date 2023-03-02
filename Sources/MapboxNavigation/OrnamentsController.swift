@@ -66,6 +66,7 @@ class OrnamentsController: NavigationComponent, NavigationComponentDelegate {
         }
         
         topBannerContainerView.backgroundColor = .clear
+        topBannerContainerView.isHidden = false
         
         let bottomBannerContainerView = navigationViewData.navigationView.bottomBannerContainerView
         
@@ -75,6 +76,7 @@ class OrnamentsController: NavigationComponent, NavigationComponentDelegate {
         }
         
         bottomBannerContainerView.backgroundColor = .clear
+        bottomBannerContainerView.isHidden = false
         
         navigationViewData.containerViewController.view.bringSubviewToFront(navigationViewData.navigationView.topBannerContainerView)
     }
@@ -165,7 +167,7 @@ class OrnamentsController: NavigationComponent, NavigationComponentDelegate {
     var labelRoadNameCompletionHandler: (LabelRoadNameCompletionHandler)?
     
     @objc func didUpdateRoadNameFromStatus(_ notification: Notification) {
-        let roadNameFromStatus = notification.userInfo?[RouteController.NotificationUserInfoKey.roadNameKey] as? String
+        let roadNameFromStatus = notification.userInfo?[RouteController.NotificationUserInfoKey.localizedRoadNameKey] as? String
         if let roadName = roadNameFromStatus?.nonEmptyString {
             let representation = notification.userInfo?[RouteController.NotificationUserInfoKey.routeShieldRepresentationKey] as? VisualInstruction.Component.ImageRepresentation
             navigationView.wayNameView.label.updateRoad(roadName: roadName, representation: representation)

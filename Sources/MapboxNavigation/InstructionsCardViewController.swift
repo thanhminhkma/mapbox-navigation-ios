@@ -26,7 +26,7 @@ open class InstructionsCardViewController: UIViewController {
         
         var mutatedSteps = steps
         if mutatedSteps.count > 1 {
-            mutatedSteps = Array(mutatedSteps.suffix(from: stepIndex))
+            mutatedSteps = Array(mutatedSteps.dropFirst(stepIndex))
             mutatedSteps.removeLast()
         }
         
@@ -430,6 +430,14 @@ extension InstructionsCardViewController: NavigationComponent {
                                   didRerouteAlong route: Route,
                                   at location: CLLocation?,
                                   proactive: Bool) {
+        currentStepIndex = nil
+        routeProgress = service.routeProgress
+        
+        reloadDataSource()
+    }
+    
+    public func navigationService(_ service: NavigationService,
+                                  didSwitchToCoincidentOnlineRoute coincideRoute: Route) {
         currentStepIndex = nil
         routeProgress = service.routeProgress
         

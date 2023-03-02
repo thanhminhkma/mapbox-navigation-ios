@@ -141,9 +141,8 @@ open class MapboxSpeechSynthesizer: NSObject, SpeechSynthesizing {
      - parameter data: audio data, as provided by `remoteSpeechSynthesizer`, to be played.
      */
     open func speak(_ instruction: SpokenInstruction, data: Data) {
-        
         if let audioPlayer = audioPlayer {
-            if let previousInstruction = previousInstruction, audioPlayer.isPlaying{
+            if let previousInstruction = previousInstruction, audioPlayer.isPlaying {
                 delegate?.speechSynthesizer(self,
                                             didInterrupt: previousInstruction,
                                             with: instruction)
@@ -225,7 +224,7 @@ open class MapboxSpeechSynthesizer: NSObject, SpeechSynthesizing {
         }
     }
     
-    func safeDuckAudio(instruction: SpokenInstruction?){
+    func safeDuckAudio(instruction: SpokenInstruction?) {
         guard managesAudioSession else { return }
         if let error = AVAudioSession.sharedInstance().tryDuckAudio() {
             delegate?.speechSynthesizer(self,

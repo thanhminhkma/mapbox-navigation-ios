@@ -39,7 +39,7 @@ import MapboxCoreNavigation
 @IBDesignable
 open class NavigationView: UIView {
     
-    private enum Constants {
+    enum Constants {
         static let endOfRouteHeight: CGFloat = 260.0
         static let buttonSpacing: CGFloat = 8.0
     }
@@ -59,7 +59,9 @@ open class NavigationView: UIView {
         navigationMapView.delegate = delegate
     }
     
-    // :nodoc:
+    /**
+     `NavigationMapView` that is displayed inside the `NavigationView`.
+     */
     public var navigationMapView: NavigationMapView {
         didSet {
             oldValue.removeFromSuperview()
@@ -83,9 +85,13 @@ open class NavigationView: UIView {
     
     lazy var endOfRouteShowConstraint: NSLayoutConstraint? = endOfRouteView?.bottomAnchor.constraint(equalTo: bottomAnchor)
     
-    lazy var endOfRouteHideConstraint: NSLayoutConstraint? = endOfRouteView?.topAnchor.constraint(equalTo: bottomAnchor)
-    
     lazy var endOfRouteHeightConstraint: NSLayoutConstraint? = endOfRouteView?.heightAnchor.constraint(equalToConstant: Constants.endOfRouteHeight)
+    
+    var topBannerContainerViewLayoutConstraints: [NSLayoutConstraint] = []
+    
+    var bottomBannerContainerViewLayoutConstraints: [NSLayoutConstraint] = []
+    
+    var endOfRouteViewLayoutConstraints: [NSLayoutConstraint] = []
     
     var endOfRouteView: UIView? {
         didSet {
@@ -99,18 +105,16 @@ open class NavigationView: UIView {
         }
     }
     
-    func constrainEndOfRoute() {
-        endOfRouteHideConstraint?.isActive = true
-        
-        endOfRouteView?.leadingAnchor.constraint(equalTo: leadingAnchor).isActive = true
-        endOfRouteView?.trailingAnchor.constraint(equalTo: trailingAnchor).isActive = true
-        
-        endOfRouteHeightConstraint?.isActive = true
+    func showEndOfRoute() {
+        endOfRouteView?.isHidden = false
+        setupEndOfRouteConstraints()
     }
     
     // MARK: Overlay Views
     
-    // :nodoc:
+    /**
+     Stack view that contains floating buttons.
+     */
     public lazy var floatingStackView: UIStackView = {
         let stackView = UIStackView(orientation: .vertical, autoLayout: true)
         stackView.distribution = .equalSpacing
@@ -118,13 +122,21 @@ open class NavigationView: UIView {
         return stackView
     }()
     
+    var floatingStackViewLayoutGuide: UILayoutGuide? {
+        didSet {
+            setupConstraints()
+        }
+    }
+    
     var floatingButtonsPosition: MapOrnamentPosition = .topTrailing {
         didSet {
             setupConstraints()
         }
     }
     
-    // :nodoc:
+    /**
+     The buttons to show floating on the map inside `floatingStackView`.
+     */
     public var floatingButtons: [UIButton]? {
         didSet {
             clearStackViews()
@@ -140,7 +152,9 @@ open class NavigationView: UIView {
         }
     }
     
-    // :nodoc:
+    /**
+     A host view for `WayNameLabel` that shows a road name and a shield icon.
+     */
     public lazy var wayNameView: WayNameView = {
         let wayNameView: WayNameView = .forAutoLayout()
         wayNameView.containerView.isHidden = true
@@ -148,19 +162,37 @@ open class NavigationView: UIView {
         return wayNameView
     }()
     
-    // :nodoc:
+    var speedLimitViewLayoutGuide: UILayoutGuide? {
+        didSet {
+            setupConstraints()
+        }
+    }
+    
+    /**
+     A view that displays a speed limit.
+     */
     public lazy var speedLimitView: SpeedLimitView = .forAutoLayout(hidden: true)
     
-    // :nodoc:
+    /**
+     View that is used as a container for top banners. By default, for turn-by-turn navigation
+     `NavigationViewController` presents `TopBannerViewController` in this banner
+     container.
+     */
     public lazy var topBannerContainerView: BannerContainerView = {
-        let topBannerContainerView = BannerContainerView(.top)
+        let topBannerContainerView = BannerContainerView(.topLeading)
+        topBannerContainerView.isHidden = true
         topBannerContainerView.translatesAutoresizingMaskIntoConstraints = false
         return topBannerContainerView
     }()
     
-    // :nodoc:
+    /**
+     View that is used as a container for bottom banners. By default, for turn-by-turn navigation
+     `NavigationViewController` presents `BottomBannerViewController` in this banner
+     container.
+     */
     public lazy var bottomBannerContainerView: BannerContainerView = {
-        let bottomBannerContainerView = BannerContainerView(.bottom)
+        let bottomBannerContainerView = BannerContainerView(.bottomLeading)
+        bottomBannerContainerView.isHidden = true
         bottomBannerContainerView.translatesAutoresizingMaskIntoConstraints = false
         return bottomBannerContainerView
     }()
@@ -181,7 +213,14 @@ open class NavigationView: UIView {
     
     // MARK: Initialization methods
     
-    // :nodoc:
+    /**
+     Initializes a `NavigationView` instance with the specified parameters.
+     
+     - parameter frame: The frame rectangle for the `NavigationView`.
+     - parameter tileStoreLocation: Configuration of the `TileStore` location, where map tiles are stored.
+     Value is ignored if custom `NavigationMapView` instance was provided. Use `nil` to disable onboard tile storage.
+     - parameter navigationMapView: Custom `NavigationMapView` instance to supersede the default one.
+     */
     public init(frame: CGRect,
                 tileStoreLocation: TileStoreConfiguration.Location? = .default,
                 navigationMapView: NavigationMapView? = nil) {
@@ -222,11 +261,11 @@ open class NavigationView: UIView {
     func setupViews() {
         let children: [UIView] = [
             navigationMapView,
-            topBannerContainerView,
             floatingStackView,
             wayNameView,
             resumeButton,
             speedLimitView,
+            topBannerContainerView,
             bottomBannerContainerView
         ]
         
@@ -235,8 +274,6 @@ open class NavigationView: UIView {
         navigationMapView.autoresizingMask = [.flexibleWidth, .flexibleHeight]
         navigationMapView.mapView.ornaments.options.compass.visibility = .hidden
         navigationMapView.pinTo(parentView: self)
-        
-        resumeButton.isHidden = true
     }
     
     open override func prepareForInterfaceBuilder() {

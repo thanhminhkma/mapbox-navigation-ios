@@ -11,8 +11,7 @@ import MapboxMaps
  
  If no delegate is set, a default built-in `MapboxNavigationService` will be created and used when a trip begins.
  */
-@available(iOS 12.0, *)
-public protocol CarPlayManagerDelegate: AnyObject, UnimplementedLogging {
+public protocol CarPlayManagerDelegate: AnyObject, UnimplementedLogging, CarPlayManagerDelegateDeprecations {
     
     // MARK: Customizing the Bar Buttons
     
@@ -114,11 +113,21 @@ public protocol CarPlayManagerDelegate: AnyObject, UnimplementedLogging {
                         selectedPreviewFor trip: CPTrip,
                         using routeChoice: CPRouteChoice)
     
+    /**
+     Called when CarPlay canceled routes preview.
+     This delegate method will be called after canceled the routes preview.
+     
+     - parameter carPlayManager: The CarPlay manager instance.
+     */
+    func carPlayManagerDidCancelPreview(_ carPlayManager: CarPlayManager)
+    
     // MARK: Monitoring Route Progress and Updates
     
     /**
      Asks the delegate to provide a navigation service. In multi-screen applications this should be
      the same instance used to guide the user along the route on the phone.
+     
+     - important: this method is superseeded by `carPlayManager(_:navigationServiceFor:desiredSimulationMode:)`, and it's call result will be preferred over current method's.
      
      - parameter carPlayManager: The CarPlay manager instance.
      - parameter routeResponse: The `RouteResponse` containing a route for which the returned route
@@ -128,10 +137,27 @@ public protocol CarPlayManagerDelegate: AnyObject, UnimplementedLogging {
      - parameter desiredSimulationMode: The desired simulation mode to use.
      - returns: A navigation service that manages location updates along `route`.
      */
+    @available(*, deprecated, renamed: "carPlayManager(_:navigationServiceFor:desiredSimulationMode:)")
     func carPlayManager(_ carPlayManager: CarPlayManager,
                         navigationServiceFor routeResponse: RouteResponse,
                         routeIndex: Int,
                         routeOptions: RouteOptions,
+                        desiredSimulationMode: SimulationMode) -> NavigationService?
+    
+    /**
+     Asks the delegate to provide a navigation service. In multi-screen applications this should be
+     the same instance used to guide the user along the route on the phone.
+     
+     - important: Implementing this method will suppress `carPlayManager(_:navigationServiceFor:routeIndex:routeOptions:desiredSimulationMode:)` being called, using current one as the source of truth for providing navigation service.
+     
+     - parameter carPlayManager: The CarPlay manager instance.
+     - parameter indexedRouteResponse: The `IndexedRouteResponse` containing a route, index and options for which the returned route
+     controller will manage location updates.
+     - parameter desiredSimulationMode: The desired simulation mode to use.
+     - returns: A navigation service that manages location updates along `route`.
+     */
+    func carPlayManager(_ carPlayManager: CarPlayManager,
+                        navigationServiceFor indexedRouteResponse: IndexedRouteResponse,
                         desiredSimulationMode: SimulationMode) -> NavigationService?
     
     /**
@@ -209,6 +235,21 @@ public protocol CarPlayManagerDelegate: AnyObject, UnimplementedLogging {
      and enable when disconnected.
      */
     func carPlayManagerShouldDisableIdleTimer(_ carPlayManager: CarPlayManager) -> Bool
+    
+    /**
+     Called when the CarPlayManager creates a new CarPlayNavigationViewController upon start of a
+     navigation session.
+     
+     Implementing this method will allow developers to query or customize properties of the
+     CarPlayNavigationViewController before it is presented. For example, a developer may wish to perform custom map styling
+     on the presented NavigationMapView.
+     
+     - parameter carPlayManager: The CarPlay manager instance.
+     - parameter navigationViewController: The CarPlayNavigationViewController that will be presented
+     on the CarPlay display.
+     */
+    func carPlayManager(_ carPlayManager: CarPlayManager,
+                        willPresent navigationViewController: CarPlayNavigationViewController)
 
     /**
      Called when the CarPlayManager presents a new CarPlayNavigationViewController upon start of a
@@ -297,8 +338,8 @@ public protocol CarPlayManagerDelegate: AnyObject, UnimplementedLogging {
      instance of either `CarPlayMapViewController` or `CarPlayNavigationViewController`.
      - returns: A `LineLayer` that is applied to the route line.
      
-     - seealso: `NavigationMapViewDelegate.navigationMapView(_:routeLineLayerWithIdentifier:sourceIdentifier:)`,
-     `NavigationViewControllerDelegate.navigationViewController.carPlayManager(_:routeLineLayerWithIdentifier:sourceIdentifier:)`.
+     - seealso: `CarPlayNavigationViewControllerDelegate.carPlayNavigationViewController(_:routeLineLayerWithIdentifier:sourceIdentifier:)`,
+     `CarPlayMapViewControllerDelegate.carPlayMapViewController(_:routeLineLayerWithIdentifier:sourceIdentifier:)`.
      */
     func carPlayManager(_ carPlayManager: CarPlayManager,
                         routeLineLayerWithIdentifier identifier: String,
@@ -317,13 +358,97 @@ public protocol CarPlayManagerDelegate: AnyObject, UnimplementedLogging {
      instance of either `CarPlayMapViewController` or `CarPlayNavigationViewController`.
      - returns: A `LineLayer` that is applied as a casing around the route line.
      
-     - seealso: `NavigationMapViewDelegate.navigationMapView(_:routeCasingLineLayerWithIdentifier:sourceIdentifier:)`,
-     `NavigationViewControllerDelegate.navigationViewController.carPlayManager(_:routeCasingLineLayerWithIdentifier:sourceIdentifier:)`.
+     - seealso: `CarPlayNavigationViewControllerDelegate.carPlayNavigationViewController(_:routeCasingLineLayerWithIdentifier:sourceIdentifier:)`,
+     `CarPlayMapViewControllerDelegate.carPlayMapViewController(_:routeCasingLineLayerWithIdentifier:sourceIdentifier:)`.
      */
     func carPlayManager(_ carPlayManager: CarPlayManager,
                         routeCasingLineLayerWithIdentifier identifier: String,
                         sourceIdentifier: String,
                         for parentViewController: UIViewController) -> LineLayer?
+    
+    /**
+     Asks the receiver to return a `LineLayer` for highlighting restricted areas portions of the route,
+     given a layer identifier and a source identifier.
+     This method is invoked when the map view loads and any time routes are added.
+     
+     - parameter carPlayManager: The `CarPlayManager` object.
+     - parameter identifier: The `LineLayer` identifier.
+     - parameter sourceIdentifier: Identifier of the source, which contains the route data that this method would style.
+     - parameter parentViewController: The view controller that contains the map view, which is an
+     instance of either `CarPlayMapViewController` or `CarPlayNavigationViewController`.
+     - returns: A `LineLayer` that is applied as restricted areas on the route line.
+     
+     - seealso: `CarPlayNavigationViewControllerDelegate.carPlayNavigationViewController(_:routeRestrictedAreasLineLayerWithIdentifier:sourceIdentifier:)`,
+     `CarPlayMapViewControllerDelegate.carPlayMapViewController(_:routeRestrictedAreasLineLayerWithIdentifier:sourceIdentifier:)`.
+     */
+    func carPlayManager(_ carPlayManager: CarPlayManager,
+                        routeRestrictedAreasLineLayerWithIdentifier identifier: String,
+                        sourceIdentifier: String,
+                        for parentViewController: UIViewController) -> LineLayer?
+    
+    /**
+     Asks the receiver to adjust the default layer which will be added to the map view and return a `Layer`.
+     This method is invoked when the map view loads and any time a layer are added.
+     
+     - parameter carPlayManager: The `CarPlayManager` object.
+     - parameter layer: A default `Layer` generated by the carPlayManager.
+     - parameter parentViewController: The view controller that contains the map view, which is an
+     instance of either `CarPlayMapViewController` or `CarPlayNavigationViewController`.
+     - returns: A `Layer` after adjusted and will be added to the map view by `MapboxNavigation`.
+     
+     - seealso: `CarPlayNavigationViewControllerDelegate.carPlayNavigationViewController(_:willAdd:)` and
+     `CarPlayMapViewControllerDelegate.carPlayMapViewController(_:willAdd:)`.
+     */
+    func carPlayManager(_ carPlayManager: CarPlayManager,
+                        willAdd layer: Layer,
+                        for parentViewController: UIViewController) -> Layer?
+
+    // MARK: Map Panning
+
+    /**
+     Called when the system detects a user starting to pan a map template visible on the screen.
+
+     - parameter carPlayManager: The `CarPlayManager` object.
+     - parameter template: The template on which the gesture was started.
+     */
+    func carPlayManager(_ carPlayManager: CarPlayManager,
+                        didBeginPanGesture template: CPMapTemplate)
+
+    /**
+     Called when the system detects a user stops panning a map template.
+
+     - parameter carPlayManager: The `CarPlayManager` object.
+     - parameter template: The template on which the gesture was ended.
+     */
+    func carPlayManager(_ carPlayManager: CarPlayManager,
+                        didEndPanGesture template: CPMapTemplate)
+
+    /**
+     Called when the pan interface appears on the map template.
+
+     - parameter carPlayManager: The `CarPlayManager` object.
+     - parameter template: The template on which the panning interface is shown.
+     */
+    func carPlayManager(_ carPlayManager: CarPlayManager,
+                        didShowPanningInterface template: CPMapTemplate)
+
+    /**
+     Called when the panning interface will disappear on a map template.
+
+     - parameter carPlayManager: The `CarPlayManager` object.
+     - parameter template: The template on which the panning interface will be dismissed.
+     */
+    func carPlayManager(_ carPlayManager: CarPlayManager,
+                        willDismissPanningInterface template: CPMapTemplate)
+
+    /**
+     Called when the panning interface disappeared on a map template.
+
+     - parameter carPlayManager: The `CarPlayManager` object.
+     - parameter template: The template on which the panning interface was dismissed.
+     */
+    func carPlayManager(_ carPlayManager: CarPlayManager,
+                        didDismissPanningInterface template: CPMapTemplate)
     
     // MARK: Notifications Management
     
@@ -371,7 +496,6 @@ public protocol CarPlayManagerDelegate: AnyObject, UnimplementedLogging {
                         in mapTemplate: CPMapTemplate) -> Bool
 }
 
-@available(iOS 12.0, *)
 public extension CarPlayManagerDelegate {
     /**
      `UnimplementedLogging` prints a warning to standard output the first time this method is called.
@@ -421,6 +545,15 @@ public extension CarPlayManagerDelegate {
      `UnimplementedLogging` prints a warning to standard output the first time this method is called.
      */
     func carPlayManager(_ carPlayManager: CarPlayManager,
+                        navigationServiceFor indexedRouteResponse: IndexedRouteResponse,
+                        desiredSimulationMode: SimulationMode) -> NavigationService? {
+        return nil
+    }
+    
+    /**
+     `UnimplementedLogging` prints a warning to standard output the first time this method is called.
+     */
+    func carPlayManager(_ carPlayManager: CarPlayManager,
                         didFailToFetchRouteBetween waypoints: [Waypoint]?,
                         options: RouteOptions,
                         error: DirectionsError) -> CPNavigationAlert? {
@@ -453,6 +586,13 @@ public extension CarPlayManagerDelegate {
     func carPlayManager(_ carPlayManager: CarPlayManager,
                         selectedPreviewFor trip: CPTrip,
                         using routeChoice: CPRouteChoice) {
+        logUnimplemented(protocolType: CarPlayManagerDelegate.self, level: .debug)
+    }
+    
+    /**
+     `UnimplementedLogging` prints a warning to standard output the first time this method is called.
+     */
+    func carPlayManagerDidCancelPreview(_ carPlayManager: CarPlayManager) {
         logUnimplemented(protocolType: CarPlayManagerDelegate.self, level: .debug)
     }
     
@@ -502,6 +642,14 @@ public extension CarPlayManagerDelegate {
     func carPlayManagerShouldDisableIdleTimer(_ carPlayManager: CarPlayManager) -> Bool {
         logUnimplemented(protocolType: CarPlayManagerDelegate.self, level: .debug)
         return true
+    }
+    
+    /**
+     `UnimplementedLogging` prints a warning to standard output the first time this method is called.
+     */
+    func carPlayManager(_ carPlayManager: CarPlayManager,
+                        willPresent navigationViewController: CarPlayNavigationViewController) {
+        logUnimplemented(protocolType: CarPlayManagerDelegate.self, level: .debug)
     }
 
     /**
@@ -584,6 +732,67 @@ public extension CarPlayManagerDelegate {
      `UnimplementedLogging` prints a warning to standard output the first time this method is called.
      */
     func carPlayManager(_ carPlayManager: CarPlayManager,
+                        routeRestrictedAreasLineLayerWithIdentifier identifier: String,
+                        sourceIdentifier: String,
+                        for parentViewController: UIViewController) -> LineLayer? {
+        logUnimplemented(protocolType: CarPlayManagerDelegate.self, level: .debug)
+        return nil
+    }
+    
+    /**
+     `UnimplementedLogging` prints a warning to standard output the first time this method is called.
+     */
+    func carPlayManager(_ carPlayManager: CarPlayManager,
+                        willAdd layer: Layer,
+                        for parentViewController: UIViewController) -> Layer? {
+        logUnimplemented(protocolType: CarPlayManagerDelegate.self, level: .debug)
+        return nil
+    }
+
+    /**
+     `UnimplementedLogging` prints a warning to standard output the first time this method is called.
+     */
+    func carPlayManager(_ carPlayManager: CarPlayManager,
+                        didBeginPanGesture template: CPMapTemplate) {
+        logUnimplemented(protocolType: CarPlayManagerDelegate.self, level: .debug)
+    }
+
+    /**
+     `UnimplementedLogging` prints a warning to standard output the first time this method is called.
+     */
+    func carPlayManager(_ carPlayManager: CarPlayManager,
+                        didEndPanGesture template: CPMapTemplate) {
+        logUnimplemented(protocolType: CarPlayManagerDelegate.self, level: .debug)
+    }
+
+    /**
+     `UnimplementedLogging` prints a warning to standard output the first time this method is called.
+     */
+    func carPlayManager(_ carPlayManager: CarPlayManager,
+                        didShowPanningInterface template: CPMapTemplate) {
+        logUnimplemented(protocolType: CarPlayManagerDelegate.self, level: .debug)
+    }
+
+    /**
+     `UnimplementedLogging` prints a warning to standard output the first time this method is called.
+     */
+    func carPlayManager(_ carPlayManager: CarPlayManager,
+                        willDismissPanningInterface template: CPMapTemplate) {
+        logUnimplemented(protocolType: CarPlayManagerDelegate.self, level: .debug)
+    }
+
+    /**
+     `UnimplementedLogging` prints a warning to standard output the first time this method is called.
+     */
+    func carPlayManager(_ carPlayManager: CarPlayManager,
+                        didDismissPanningInterface template: CPMapTemplate) {
+        logUnimplemented(protocolType: CarPlayManagerDelegate.self, level: .debug)
+    }
+    
+    /**
+     `UnimplementedLogging` prints a warning to standard output the first time this method is called.
+     */
+    func carPlayManager(_ carPlayManager: CarPlayManager,
                         shouldShowNotificationFor maneuver: CPManeuver,
                         in mapTemplate: CPMapTemplate) -> Bool {
         return false
@@ -607,4 +816,17 @@ public extension CarPlayManagerDelegate {
                         in mapTemplate: CPMapTemplate) -> Bool {
         return false
     }
+}
+
+/**
+ :nodoc:
+ 
+ This protocol redeclares the deprecated methods of the `CarPlayManagerDelegate` protocol for the purpose of calling implementations of these methods that have not been upgraded yet.
+ */
+public protocol CarPlayManagerDelegateDeprecations {
+    func carPlayManager(_ carPlayManager: CarPlayManager,
+                        navigationServiceFor routeResponse: RouteResponse,
+                        routeIndex: Int,
+                        routeOptions: RouteOptions,
+                        desiredSimulationMode: SimulationMode) -> NavigationService?
 }

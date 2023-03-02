@@ -2,30 +2,29 @@ import XCTest
 import TestHelper
 import SnapshotTesting
 import MapboxDirections
+import MapboxMaps
 @testable import MapboxNavigation
 @testable import MapboxCoreNavigation
 
-class InstructionsBannerViewSnapshotTests: TestCase {
-    let spriteRepository: SpriteRepository = SpriteRepository.shared
-
+class InstructionsBannerViewSnapshotTests: InstructionBannerTest {
     let asyncTimeout: TimeInterval = 2.0
 
     override func setUp() {
         super.setUp()
         isRecording = false
 
-        let i280Instruction = VisualInstruction.Component.image(image: .init(imageBaseURL: ShieldImage.i280.baseURL), alternativeText: .init(text: "I-280", abbreviation: nil, abbreviationPriority: 0))
-        let us101Instruction = VisualInstruction.Component.image(image: .init(imageBaseURL: ShieldImage.us101.baseURL), alternativeText: .init(text: "US 101", abbreviation: nil, abbreviationPriority: 0))
+        let i280Representation = VisualInstruction.Component.ImageRepresentation(imageBaseURL: ShieldImage.i280.baseURL)
+        let us101Representation = VisualInstruction.Component.ImageRepresentation(imageBaseURL: ShieldImage.us101.baseURL)
 
-        spriteRepository.legacyCache.store(ShieldImage.i280.image, forKey: i280Instruction.cacheKey!, toDisk: false, completion: nil)
-        spriteRepository.legacyCache.store(ShieldImage.us101.image, forKey: us101Instruction.cacheKey!, toDisk: false, completion: nil)
+        cacheLegacyIcon(with: i280Representation, shieldImage: .i280)
+        cacheLegacyIcon(with: us101Representation, shieldImage: .us101)
         NavigationSettings.shared.distanceUnit = .mile
         DayStyle().apply()
     }
 
     override func tearDown() {
         super.tearDown()
-        spriteRepository.resetCache()
+        clearDiskCache()
     }
 
     func testSinglelinePrimary() {
@@ -82,8 +81,7 @@ class InstructionsBannerViewSnapshotTests: TestCase {
     }
     
     func testSinglelinePrimaryAndSecondaryWithShield() {
-        spriteRepository.spriteCache.store(ShieldImage.shieldDay.image, forKey: spriteRepository.styleID!, toDisk: false, completion: nil)
-        spriteRepository.infoCache.store(Fixture.JSONFromFileNamed(name: "sprite-info"), spriteKey: spriteRepository.styleID!)
+        cacheSprite(for: .navigationDay)
         
         let view = instructionsView()
         styleInstructionsView(view)
@@ -105,8 +103,7 @@ class InstructionsBannerViewSnapshotTests: TestCase {
     }
     
     func testSinglelinePrimaryAndSecondaryWithNightShield() {
-        spriteRepository.spriteCache.store(ShieldImage.shieldNight.image, forKey: spriteRepository.styleID!, toDisk: false, completion: nil)
-        spriteRepository.infoCache.store(Fixture.JSONFromFileNamed(name: "sprite-info"), spriteKey: spriteRepository.styleID!)
+        cacheSprite(for: .navigationNight)
         
         let view = instructionsView()
         styleInstructionsView(view)
@@ -183,7 +180,6 @@ class InstructionsBannerViewSnapshotTests: TestCase {
             .text(text: .init(text: "20 West", abbreviation: "20 W", abbreviationPriority: 1)),
         ]
 
-        spriteRepository.legacyCache.store(ShieldImage.i280.image, forKey: primary.first!.cacheKey!, toDisk: false, completion: nil)
         view.update(for: makeVisualInstruction(.continue, .straightAhead, primaryInstruction: primary, secondaryInstruction: nil))
 
         assertImageSnapshot(matching: view, as: .image(precision: 0.95))
@@ -300,7 +296,6 @@ class InstructionsBannerViewSnapshotTests: TestCase {
     }
 
     func testExitShields() {
-        let window = UIWindow(frame: CGRect(origin: .zero, size: .iPhone6Plus))
         let view = instructionsView()
         styleInstructionsView(view)
         view.maneuverView.isStart = true
@@ -315,14 +310,12 @@ class InstructionsBannerViewSnapshotTests: TestCase {
         let secondary = VisualInstruction.Component.text(text: .init(text: "Anytown Avenue", abbreviation: "Anytown Ave", abbreviationPriority: 0))
 
         DayStyle().apply()
-        window.addSubview(view)
 
         view.update(for: makeVisualInstruction(.takeOffRamp, .right, primaryInstruction: primary, secondaryInstruction: [secondary]))
         assertImageSnapshot(matching: view, as: .image(precision: 0.95))
     }
 
     func testGenericShields() {
-        let window = UIWindow(frame: CGRect(origin: .zero, size: .iPhone6Plus))
         let view = instructionsView()
         styleInstructionsView(view)
         view.maneuverView.isStart = true
@@ -335,7 +328,6 @@ class InstructionsBannerViewSnapshotTests: TestCase {
 
         let secondary = [VisualInstruction.Component.text(text: .init(text: "Vetinari Way", abbreviation: nil, abbreviationPriority: nil))]
 
-        window.addSubview(view)
         DayStyle().apply()
 
         view.update(for: makeVisualInstruction(.reachFork, .right, primaryInstruction: primary, secondaryInstruction: secondary))
@@ -353,18 +345,20 @@ class InstructionsBannerViewSnapshotTests: TestCase {
             override func apply() {
                 super.apply()
                 
-                PrimaryLabel.appearance(whenContainedInInstancesOf: [InstructionsBannerView.self]).normalTextColor = UIColor.green
-                SecondaryLabel.appearance(whenContainedInInstancesOf: [InstructionsBannerView.self]).normalTextColor = UIColor.red
+                let traitCollection = UITraitCollection(userInterfaceIdiom: .phone)
+                PrimaryLabel.appearance(for: traitCollection).normalTextColor = UIColor.green
+                SecondaryLabel.appearance(for: traitCollection).normalTextColor = UIColor.red
                 
-                GenericRouteShield.appearance().foregroundColor = UIColor.blue
-                GenericRouteShield.appearance().borderWidth = 1.0
+                GenericRouteShield.appearance(for: traitCollection).borderWidth = 1.0
+                GenericRouteShield.appearance(for: traitCollection).foregroundColor = UIColor.blue
+                GenericRouteShield.appearance(for: traitCollection).borderColor = UIColor.blue
                 
-                ExitView.appearance().foregroundColor = UIColor.yellow
-                ExitView.appearance().borderWidth = 1.0
+                ExitView.appearance(for: traitCollection).borderWidth = 1.0
+                ExitView.appearance(for: traitCollection).foregroundColor = UIColor.yellow
+                ExitView.appearance(for: traitCollection).borderColor = UIColor.yellow
             }
         }
         
-        let window = UIWindow(frame: CGRect(origin: .zero, size: .iPhone6Plus))
         let instructionsBannerView = instructionsView()
         styleInstructionsView(instructionsBannerView)
         instructionsBannerView.distance = 1400 // meters
@@ -396,7 +390,6 @@ class InstructionsBannerViewSnapshotTests: TestCase {
                                           abbreviationPriority: nil)),
         ]
         
-        window.addSubview(instructionsBannerView)
         CustomDayStyle().apply()
         
         let visualInstructionBanner = makeVisualInstruction(.takeOffRamp,
@@ -406,6 +399,75 @@ class InstructionsBannerViewSnapshotTests: TestCase {
         
         instructionsBannerView.update(for: visualInstructionBanner)
         
+        assertImageSnapshot(matching: instructionsBannerView,
+                            as: .image(precision: 0.95))
+    }
+    
+    func testGenericShieldAndExitViewHighlightColor() {
+        class CustomDayStyle: DayStyle {
+            
+            required init() {
+                super.init()
+            }
+            
+            override func apply() {
+                super.apply()
+                
+                let traitCollection = UITraitCollection(userInterfaceIdiom: .phone)
+                // Check that PrimaryLabel.normalTextColor is not used
+                PrimaryLabel.appearance(for: traitCollection).normalTextColor = UIColor.blue
+                PrimaryLabel.appearance(for: traitCollection).textColorHighlighted = UIColor.green
+                
+                // Check that SecondaryLabel.textColorHighlighted is not used
+                SecondaryLabel.appearance(for: traitCollection).normalTextColor = UIColor.red
+                SecondaryLabel.appearance(for: traitCollection).textColorHighlighted = UIColor.yellow
+                
+                GenericRouteShield.appearance(for: traitCollection).highlightColor = UIColor.blue
+                ExitView.appearance(for: traitCollection).highlightColor = UIColor.yellow
+            }
+        }
+        
+        let instructionsBannerView = instructionsView()
+        styleInstructionsView(instructionsBannerView)
+        instructionsBannerView.distance = 50
+        
+        let primaryInstruction: [VisualInstruction.Component] = [
+            .exitCode(text: .init(text: "15",
+                                  abbreviation: nil,
+                                  abbreviationPriority: nil)),
+            .delimiter(text: .init(text: "/",
+                                   abbreviation: nil,
+                                   abbreviationPriority: nil)),
+            .image(image: .init(imageBaseURL: nil),
+                   alternativeText: .init(text: "CTE",
+                                          abbreviation: nil,
+                                          abbreviationPriority: nil)),
+        ]
+        
+        let secondaryInstruction: [VisualInstruction.Component] = [
+            .exitCode(text: .init(text: "15",
+                                  abbreviation: nil,
+                                  abbreviationPriority: nil)),
+            .delimiter(text: .init(text: "/",
+                                   abbreviation: nil,
+                                   abbreviationPriority: nil)),
+            .image(image: .init(imageBaseURL: nil),
+                   alternativeText: .init(text: "CTE",
+                                          abbreviation: nil,
+                                          abbreviationPriority: nil)),
+        ]
+        
+        instructionsBannerView.primaryLabel.showHighlightedTextColor = true
+        instructionsBannerView.secondaryLabel.showHighlightedTextColor = false
+
+        CustomDayStyle().apply()
+
+        let visualInstructionBanner = makeVisualInstruction(.takeOffRamp,
+                                                            .right,
+                                                            primaryInstruction: primaryInstruction,
+                                                            secondaryInstruction: secondaryInstruction)
+        instructionsBannerView.update(for: visualInstructionBanner)
+
         assertImageSnapshot(matching: instructionsBannerView,
                             as: .image(precision: 0.95))
     }
@@ -430,3 +492,73 @@ extension InstructionsBannerViewSnapshotTests {
         view.secondaryLabel.font = UIFont.systemFont(ofSize: 26, weight: .medium)
     }
 }
+
+class InstructionBannerTest: TestCase {
+    var spriteRepository: SpriteRepository!
+
+    override func setUp() {
+        super.setUp()
+
+        spriteRepository = SpriteRepository(requestCache: URLCacheSpy(),
+                                            derivedCache: BimodalImageCacheSpy())
+    }
+
+    func instructionsView(size: CGSize = .iPhone6Plus) -> InstructionsBannerView {
+        let bannerHeight: CGFloat = 96
+        let frame = CGRect(origin: .zero, size: CGSize(width: size.width, height: bannerHeight))
+        let bannerView = InstructionsBannerView(frame: frame)
+        bannerView.primaryLabel.spriteRepository = spriteRepository
+        bannerView.secondaryLabel.spriteRepository = spriteRepository
+        return bannerView
+    }
+
+    func makeVisualInstruction(_ maneuverType: ManeuverType = .arrive,
+                               _ maneuverDirection: ManeuverDirection = .left,
+                               primaryInstruction: [VisualInstruction.Component],
+                               secondaryInstruction: [VisualInstruction.Component]?,
+                               drivingSide: DrivingSide = .right) -> VisualInstructionBanner {
+        return Fixture.makeVisualInstruction(maneuverType: maneuverType,
+                                             maneuverDirection: maneuverDirection,
+                                             primaryInstruction: primaryInstruction,
+                                             secondaryInstruction: secondaryInstruction,
+                                             drivingSide: drivingSide)
+    }
+    
+    func cacheSprite(for styleURI: StyleURI = .navigationDay) {
+        let shieldImage: ShieldImage = (styleURI == .navigationDay) ? .shieldDay : .shieldNight
+        guard let styleID = spriteRepository.styleID(for: styleURI),
+              let spriteRequestURL = spriteRepository.spriteURL(isImage: true, styleID: styleID),
+              let infoRequestURL = spriteRepository.spriteURL(isImage: false, styleID: styleID),
+              let spriteData = shieldImage.image.pngData() else {
+                  XCTFail("Failed to form request URL.")
+                  return
+              }
+        
+        let spriteResponse = URLResponse(url: spriteRequestURL, mimeType: nil, expectedContentLength: spriteData.count, textEncodingName: nil)
+        spriteRepository.requestCache.store( CachedURLResponse(response: spriteResponse, data: spriteData), for: spriteRequestURL)
+        
+        let infoData = Fixture.JSONFromFileNamed(name: "sprite-info")
+        let infoResponse = URLResponse(url: infoRequestURL, mimeType: nil, expectedContentLength: infoData.count, textEncodingName: nil)
+        spriteRepository.requestCache.store( CachedURLResponse(response: infoResponse, data: infoData), for: infoRequestURL)
+    }
+    
+    func clearDiskCache() {
+        let semaphore = DispatchSemaphore(value: 0)
+        spriteRepository.resetCache() {
+            semaphore.signal()
+        }
+        let semaphoreResult = semaphore.wait(timeout: XCTestCase.NavigationTests.timeout)
+        XCTAssert(semaphoreResult == .success, "Semaphore timed out")
+    }
+    
+    func cacheLegacyIcon(with representation: VisualInstruction.Component.ImageRepresentation, shieldImage: ShieldImage) {
+        guard let legacyURL = representation.imageURL(scale: VisualInstruction.Component.scale, format: .png),
+              let data = shieldImage.image.pngData() else {
+            XCTFail("Failed to cache legacy images.")
+            return
+        }
+        let response = URLResponse(url: legacyURL, mimeType: nil, expectedContentLength: data.count, textEncodingName: nil)
+        spriteRepository.requestCache.store(CachedURLResponse(response: response, data: data), for: legacyURL)
+    }
+}
+

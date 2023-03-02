@@ -2,21 +2,69 @@ import UIKit
 
 extension UIImage {
     
-    static let overview = UIImage(named: "overview",
+    static let overviewImage = UIImage(named: "overview",
+                                       in: .mapboxNavigation,
+                                       compatibleWith: nil)!.withRenderingMode(.alwaysTemplate)
+    
+    static let previewOverviewImage = UIImage(named: "preview_overview",
+                                              in: .mapboxNavigation,
+                                              compatibleWith: nil)!.withRenderingMode(.alwaysTemplate)
+    
+    static let previewStartImage = UIImage(named: "start",
+                                           in: .mapboxNavigation,
+                                           compatibleWith: nil)!.withRenderingMode(.alwaysTemplate)
+    
+    static let volumeUpImage = UIImage(named: "volume_up",
+                                       in: .mapboxNavigation,
+                                       compatibleWith: nil)!.withRenderingMode(.alwaysTemplate)
+    
+    static let volumeOffImage = UIImage(named: "volume_off",
+                                        in: .mapboxNavigation,
+                                        compatibleWith: nil)!.withRenderingMode(.alwaysTemplate)
+    
+    static let feedbackImage = UIImage(named: "feedback",
+                                       in: .mapboxNavigation,
+                                       compatibleWith: nil)!.withRenderingMode(.alwaysTemplate)
+    
+    static let northUpImage = UIImage(named: "north-lock",
+                                      in: .mapboxNavigation,
+                                      compatibleWith: nil)!.withRenderingMode(.alwaysTemplate)
+    
+    static let recenterImage = UIImage(named: "recenter",
+                                       in: .mapboxNavigation,
+                                       compatibleWith: nil)!.withRenderingMode(.alwaysTemplate)
+    
+    static let followImage = UIImage(named: "follow",
+                                     in: .mapboxNavigation,
+                                     compatibleWith: nil)!.withRenderingMode(.alwaysTemplate)
+    
+    static let pinImage = UIImage(named: "pin",
                                   in: .mapboxNavigation,
                                   compatibleWith: nil)!.withRenderingMode(.alwaysTemplate)
     
-    static let volumeUp = UIImage(named: "volume_up",
-                                  in: .mapboxNavigation,
-                                  compatibleWith: nil)!.withRenderingMode(.alwaysTemplate)
-    
-    static let volumeOff = UIImage(named: "volume_off",
+    static let timeImage = UIImage(named: "time",
                                    in: .mapboxNavigation,
                                    compatibleWith: nil)!.withRenderingMode(.alwaysTemplate)
     
-    static let feedback = UIImage(named: "feedback",
-                                  in: .mapboxNavigation,
-                                  compatibleWith: nil)!.withRenderingMode(.alwaysTemplate)
+    static let locationImage = UIImage(named: "location",
+                                       in: .mapboxNavigation,
+                                       compatibleWith: nil)!.withRenderingMode(.alwaysTemplate)
+    
+    static let starImage = UIImage(named: "star",
+                                   in: .mapboxNavigation,
+                                   compatibleWith: nil)
+    
+    static let backImage = UIImage(named: "back",
+                                   in: .mapboxNavigation,
+                                   compatibleWith: nil)
+    
+    static let defaultMarkerImage = UIImage(named: "default_marker",
+                                            in: .mapboxNavigation,
+                                            compatibleWith: nil)!
+    
+    static let debugImage = UIImage(named: "debug",
+                                    in: .mapboxNavigation,
+                                    compatibleWith: nil)!.withRenderingMode(.alwaysTemplate)
     
     convenience init?(color: UIColor, size: CGSize = CGSize(width: 1.0, height: 1.0)) {
         let rect = CGRect(origin: .zero, size: size)
@@ -77,6 +125,14 @@ extension UIImage {
             (text as NSString).draw(in: rect.offsetBy(dx: 0,
                                                       dy: (constrainedSize.height - font.lineHeight) / 2).integral,
                                     withAttributes: textFontAttributes)
+        }
+    }
+    
+    func scale(to height: Double) -> UIImage {
+        let ratio = height / size.height
+        let newSize = CGSize(width: ratio * size.width, height: ratio * size.height)
+        return UIGraphicsImageRenderer(size: newSize).image { _ in
+            self.draw(in: CGRect(origin: .zero, size: newSize))
         }
     }
 

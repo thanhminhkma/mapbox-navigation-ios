@@ -2,6 +2,7 @@ import Foundation
 import CoreLocation
 import MapboxDirections
 import Turf
+import class MapboxNavigationNative.NavigationStatus
 
 /**
  `RouteProgress` stores the user’s progress along a route.
@@ -15,12 +16,15 @@ open class RouteProgress: Codable {
      - parameter route: The route to follow.
      - parameter options: The route options that were attached to the route request.
      - parameter legIndex: Zero-based index indicating the current leg the user is on.
+     - parameter routeShapeIndex: Index relative to route shape, representing the point the user is currently located at.
+     - parameter legShapeIndex: Index relative to leg shape, representing the point the user is currently located at.
      */
-    public init(route: Route, options: RouteOptions, legIndex: Int = 0, spokenInstructionIndex: Int = 0) {
+    public init(route: Route, options: RouteOptions, legIndex: Int = 0, spokenInstructionIndex: Int = 0, routeShapeIndex: Int = 0, legShapeIndex: Int = 0) {
         self.route = route
         self.routeOptions = options
         self.legIndex = legIndex
-        self.currentLegProgress = RouteLegProgress(leg: route.legs[legIndex], stepIndex: 0, spokenInstructionIndex: spokenInstructionIndex)
+        self.shapeIndex = routeShapeIndex
+        self.currentLegProgress = RouteLegProgress(leg: route.legs[legIndex], stepIndex: 0, spokenInstructionIndex: spokenInstructionIndex, shapeIndex: legShapeIndex)
 
         self.calculateLegsCongestion()
     }
@@ -144,13 +148,29 @@ open class RouteProgress: Codable {
     public func refreshRoute(with refreshedRoute: RouteRefreshSource, at location: CLLocation) {
         route.refreshLegAttributes(from: refreshedRoute)
         route.refreshLegIncidents(from: refreshedRoute)
+        commonRefreshRoute(at: location)
+    }
+
+    public func refreshRoute(with refreshedRoute: RouteRefreshSource, at location: CLLocation, legIndex: Int, legShapeIndex: Int) {
+        route.refreshLegAttributes(from: refreshedRoute, legIndex: legIndex, legShapeIndex: legShapeIndex)
+        route.refreshLegIncidents(from: refreshedRoute, legIndex: legIndex, legShapeIndex: legShapeIndex)
+        commonRefreshRoute(at: location)
+    }
+
+    private func commonRefreshRoute(at location: CLLocation) {
         currentLegProgress = RouteLegProgress(leg: route.legs[legIndex],
                                               stepIndex: currentLegProgress.stepIndex,
-                                              spokenInstructionIndex: currentLegProgress.currentStepProgress.spokenInstructionIndex)
+                                              spokenInstructionIndex: currentLegProgress.currentStepProgress.spokenInstructionIndex,
+                                              intersectionIndex: currentLegProgress.currentStepProgress.intersectionIndex)
         calculateLegsCongestion()
         updateDistanceTraveled(with: location)
     }
-    
+
+    /**
+     Index relative to route shape, representing the point the user is currently located at.
+     */
+    public internal(set) var shapeIndex: Int
+
     /**
      Increments the progress according to new location specified.
      - parameter location: Updated user location.
@@ -167,6 +187,56 @@ open class RouteProgress: Codable {
             let remainingDistance = polyline.distance(from: closestCoordinate.coordinate)!
             let distanceTraveled = step.distance - remainingDistance
             stepProgress.distanceTraveled = distanceTraveled
+        }
+    }
+
+    func updateDistanceTraveled(navigationStatus: NavigationStatus) {
+        let stepProgress = currentLegProgress.currentStepProgress
+
+        if let activeGuidanceInfo = navigationStatus.activeGuidanceInfo {
+            stepProgress.distanceTraveled = activeGuidanceInfo.stepProgress.distanceTraveled
+        }
+        else {
+            updateDistanceTraveled(with: .init(navigationStatus.location))
+        }
+        updateDistanceToIntersection()
+    }
+    
+    /**
+     Update the distance to intersection according to new location specified.
+     - parameter location: Updated user location.
+     */
+    private func updateDistanceToIntersection() {
+        guard var intersections = currentLegProgress.currentStepProgress.step.intersections else { return }
+        
+        // The intersections array does not include the upcoming maneuver intersection.
+        if let upcomingIntersection = currentLegProgress.upcomingStep?.intersections?.first {
+            intersections += [upcomingIntersection]
+        }
+        currentLegProgress.currentStepProgress.intersectionsIncludingUpcomingManeuverIntersection = intersections
+
+        if let shape = currentLegProgress.currentStep.shape,
+           let upcomingIntersection = currentLegProgress.currentStepProgress.upcomingIntersection,
+           let coordinateOnStep = shape.coordinateFromStart(
+               distance: currentLegProgress.currentStepProgress.distanceTraveled
+           ) {
+            currentLegProgress.currentStepProgress.userDistanceToUpcomingIntersection = shape.distance(
+                from: coordinateOnStep,
+                to: upcomingIntersection.location
+            )
+        }
+        
+        updateIntersectionDistances()
+    }
+    
+    func updateIntersectionDistances() {
+        guard currentLegProgress.currentStepProgress.intersectionDistances == nil else { return }
+        
+        currentLegProgress.currentStepProgress.intersectionDistances = [CLLocationDistance]()
+        if let shape = currentLegProgress.currentStep.shape,
+           let intersections = currentLegProgress.currentStep.intersections {
+            let distances: [CLLocationDistance] = intersections.compactMap { shape.distance(from: shape.coordinates.first, to: $0.location) }
+            currentLegProgress.currentStepProgress.intersectionDistances = distances
         }
     }
     
@@ -353,6 +423,7 @@ open class RouteProgress: Codable {
         case routeOptions
         case legIndex
         case currentLegProgress
+        case shapeIndex
     }
         
     required public init(from decoder: Decoder) throws {
@@ -363,6 +434,7 @@ open class RouteProgress: Codable {
         self.routeOptions = try container.decode(RouteOptions.self, forKey: .routeOptions)
         self.legIndex = try container.decode(Int.self, forKey: .legIndex)
         self.currentLegProgress = try container.decode(RouteLegProgress.self, forKey: .currentLegProgress)
+        self.shapeIndex = try container.decode(Int.self, forKey: .shapeIndex)
         
         calculateLegsCongestion()
     }
@@ -374,5 +446,6 @@ open class RouteProgress: Codable {
         try container.encode(routeOptions, forKey: .routeOptions)
         try container.encode(legIndex, forKey: .legIndex)
         try container.encode(currentLegProgress, forKey: .currentLegProgress)
+        try container.encode(shapeIndex, forKey: .shapeIndex)
     }
 }

@@ -23,7 +23,9 @@ open class InstructionLabel: StylableLabel, InstructionPresenterDataSource {
     var imageDownloadCompletion: (() -> Void)?
     weak var instructionDelegate: VisualInstructionDelegate?
     var customTraitCollection: UITraitCollection?
-    
+
+    var spriteRepository: SpriteRepository = .shared
+
     var instruction: VisualInstruction? {
         didSet {
             updateLabelAttributedText()
@@ -44,9 +46,10 @@ open class InstructionLabel: StylableLabel, InstructionPresenterDataSource {
         
         let presenter = InstructionPresenter(instruction,
                                              dataSource: self,
+                                             spriteRepository: spriteRepository,
                                              traitCollection: customTraitCollection ?? traitCollection,
-                                             downloadCompletion: update)
-        
+                                             downloadCompletion: update,
+                                             isHighlighted: showHighlightedTextColor)
         let attributed = presenter.attributedText()
         attributedText = instructionDelegate?.label(self, willPresent: instruction, as: attributed) ?? attributed
     }

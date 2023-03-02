@@ -1,6 +1,9 @@
 /* Combined alternatives selection notes about duration (first slot position) and distance (second slot position) delta. */
 "ALTERNATIVE_NOTES" = "%1$@ / %2$@";
 
+/* Title of the back button. */
+"BACK" = "Back";
+
 /* Title for alternatives selection list button */
 "CARPLAY_ALTERNATIVES" = "Alternatives";
 
@@ -39,6 +42,9 @@
 
 /* Title for overview button in CPTripPreviewTextConfiguration */
 "CARPLAY_OVERVIEW" = "Overview";
+
+/* Title for trip preview back button */
+"CARPLAY_PREVIEW_BACK" = "BACK";
 
 /* Title for rating template in CarPlay */
 "CARPLAY_RATE_RIDE" = "Rate your ride";

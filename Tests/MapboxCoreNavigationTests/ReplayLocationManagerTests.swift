@@ -2,8 +2,9 @@ import Foundation
 @testable import MapboxCoreNavigation
 import XCTest
 import CoreLocation
+import TestHelper
 
-final class ReplayLocationManagerTests: XCTestCase {
+final class ReplayLocationManagerTests: TestCase {
     func testOneLocationReplay() {
         let manager = ReplayLocationManager(locations: [.init(latitude: 0, longitude: 0)])
         manager.speedMultiplier = 100
@@ -36,6 +37,49 @@ final class ReplayLocationManagerTests: XCTestCase {
         XCTAssertEqual(ticksCount, 1)
     }
 
+    func testInitializationUpdatesRecordedTimestamps() {
+        let deltaBetweenLocations: TimeInterval = 2
+        let firstLocationTimestamp = Date(timeIntervalSinceNow: -1000)
+        let secondLocationTimestamp = firstLocationTimestamp.addingTimeInterval(deltaBetweenLocations)
+        let firstLocation = CLLocation(coordinate: .init(latitude: 0, longitude: 0),
+                                       altitude: 0,
+                                       horizontalAccuracy: 0,
+                                       verticalAccuracy: 0,
+                                       timestamp: firstLocationTimestamp)
+        let secondLocation = CLLocation(coordinate: .init(latitude: 1, longitude: 1),
+                                        altitude: 0,
+                                        horizontalAccuracy: 0,
+                                        verticalAccuracy: 0,
+                                        timestamp: secondLocationTimestamp)
+        var manager = ReplayLocationManager(locations: [
+            firstLocation,
+            secondLocation,
+        ])
+        
+        XCTAssertTrue(abs((manager.locations.first?.timestamp.timeIntervalSince1970 ?? 0) - Date().timeIntervalSince1970) < 1, "Locations should have timestamps shifted to present time.")
+        XCTAssertEqual(manager.locations.first?.timestamp.timeIntervalSince1970,
+                       (manager.locations.last?.timestamp.timeIntervalSince1970 ?? 0) - deltaBetweenLocations,
+                       "Locations where not shifted proportionally")
+        
+        manager = ReplayLocationManager(history: History(events: [
+            LocationUpdateHistoryEvent(timestamp: firstLocationTimestamp.timeIntervalSince1970,
+                                       location: firstLocation),
+            LocationUpdateHistoryEvent(timestamp: secondLocationTimestamp.timeIntervalSince1970,
+                                       location: secondLocation)
+        ]))
+        
+        XCTAssertTrue(abs((manager.locations.first?.timestamp.timeIntervalSince1970 ?? 0) - Date().timeIntervalSince1970) < 1, "History locations should have timestamps shifted to present time.")
+        XCTAssertEqual(manager.locations.first?.timestamp.timeIntervalSince1970,
+                       (manager.locations.last?.timestamp.timeIntervalSince1970 ?? 0) - deltaBetweenLocations,
+                       "History locations where not shifted proportionally")
+        
+        XCTAssertTrue(abs((manager.events.first?.date.timeIntervalSince1970 ?? 0) - Date().timeIntervalSince1970) < 1, "History events should have timestamps shifted to present time.")
+        XCTAssertEqual(manager.events.first?.date.timeIntervalSince1970,
+                       (manager.events.last?.date.timeIntervalSince1970 ?? 0) - deltaBetweenLocations,
+                       "History events where not shifted proportionally")
+        
+    }
+    
     func testReplayLoopAlwaysAdvanceTimestamps() {
         let deltaBetweenLocations: TimeInterval = 2
         let firstLocationTimestamp = Date()

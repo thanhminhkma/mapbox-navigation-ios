@@ -15,7 +15,7 @@ Get up and running in a few minutes with our drop-in turn-by-turn navigation `Na
 
 * A full-fledged turn-by-turn navigation UI for iPhone, iPad, and CarPlay that’s ready to drop into your application
 * [Professionally designed map styles](https://www.mapbox.com/maps/) for daytime and nighttime driving
-* Worldwide driving, cycling, and walking directions powered by [open data](https://www.mapbox.com/about/open/) and user feedback
+* Worldwide driving, cycling, and walking directions powered by [open data](https://www.mapbox.com/about/maps/) and user feedback
 * Traffic avoidance and proactive rerouting based on current conditions in [over 55 countries](https://docs.mapbox.com/help/how-mapbox-works/directions/#traffic-data)
 * Natural-sounding turn instructions powered by [Amazon Polly](https://aws.amazon.com/polly/) (no configuration needed)
 * [Support for over two dozen languages](https://docs.mapbox.com/ios/navigation/overview/localization-and-internationalization/)
@@ -24,7 +24,7 @@ Get up and running in a few minutes with our drop-in turn-by-turn navigation `Na
 
 ## Requirements
 
-The Mapbox Navigation SDK and Core Navigation are compatible with applications written in Swift 5.5 in Xcode 13.0 and above. The Mapbox Navigation and Mapbox Core Navigation frameworks run on iOS 11.0 and above.
+The Mapbox Navigation SDK and Core Navigation are compatible with applications written in Swift 5.5 in Xcode 13.1 and above. The Mapbox Navigation and Mapbox Core Navigation frameworks run on iOS 12.0 and above.
 
 The Mapbox Navigation SDK is also available [for Android](https://github.com/mapbox/mapbox-navigation-android/).
 
@@ -46,15 +46,15 @@ To install the MapboxNavigation framework in an application using [Swift Package
 
 1. Enter `https://github.com/mapbox/mapbox-navigation-ios.git` as the package repository and click Next.
 
-1. Set Rules to Version, Up to Next Major, and enter `2.6.0` as the minimum version requirement. Click Next.
+1. Set Rules to Version, Up to Next Major, and enter `2.11.0` as the minimum version requirement. Click Next.
 
 To install the MapboxNavigation framework in another package rather than an application, run `swift package init` to create a Package.swift, then add the following dependency:
 
 ```swift
 // Latest stable release
-.package(name: "MapboxNavigation", url: "https://github.com/mapbox/mapbox-navigation-ios.git", from: "2.6.0")
+.package(name: "MapboxNavigation", url: "https://github.com/mapbox/mapbox-navigation-ios.git", from: "2.11.0")
 // Latest prerelease
-.package(name: "MapboxNavigation", url: "https://github.com/mapbox/mapbox-navigation-ios.git", .exact("2.8.0-beta.3"))
+.package(name: "MapboxNavigation", url: "https://github.com/mapbox/mapbox-navigation-ios.git", .exact("2.11.0-rc.2"))
 ```
 
 ### Using CocoaPods
@@ -72,11 +72,11 @@ To install the MapboxNavigation framework using [CocoaPods](https://cocoapods.or
 1. Create a [Podfile](https://guides.cocoapods.org/syntax/podfile.html) with the following specification:
    ```ruby
    # Latest stable release
-   pod 'MapboxCoreNavigation', '~> 2.6'
-   pod 'MapboxNavigation', '~> 2.6'
+   pod 'MapboxCoreNavigation', '~> 2.11'
+   pod 'MapboxNavigation', '~> 2.11'
    # Latest prerelease
-   pod 'MapboxCoreNavigation', :git => 'https://github.com/mapbox/mapbox-navigation-ios.git', :tag => 'v2.8.0-beta.3'
-   pod 'MapboxNavigation', :git => 'https://github.com/mapbox/mapbox-navigation-ios.git', :tag => 'v2.8.0-beta.3'
+   pod 'MapboxCoreNavigation', :git => 'https://github.com/mapbox/mapbox-navigation-ios.git', :tag => 'v2.11.0-rc.2'
+   pod 'MapboxNavigation', :git => 'https://github.com/mapbox/mapbox-navigation-ios.git', :tag => 'v2.11.0-rc.2'
    ```
 
 1. Run `pod repo update && pod install` and open the resulting Xcode workspace.
@@ -101,9 +101,9 @@ To install the MapboxNavigation framework using [Carthage](https://github.com/Ca
 1. Create a [Cartfile](https://github.com/Carthage/Carthage/blob/master/Documentation/Artifacts.md#github-repositories) with the following dependency:
    ```cartfile
    # Latest stable release
-   github "mapbox/mapbox-navigation-ios" ~> 2.6
+   github "mapbox/mapbox-navigation-ios" ~> 2.11
    # Latest prerelease
-   github "mapbox/mapbox-navigation-ios" "v2.8.0-beta.3"
+   github "mapbox/mapbox-navigation-ios" "v2.11.0-rc.2"
    ```
 
 1. Run `carthage bootstrap --platform iOS --use-xcframeworks --cache-builds --use-netrc`.

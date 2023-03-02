@@ -23,6 +23,8 @@ public class ExitView: StylableView {
         }
     }
     
+    @objc public dynamic var highlightColor: UIColor?
+    
     var side: ExitSide = .right {
         didSet {
             populateExitImage()
@@ -109,7 +111,7 @@ public class ExitView: StylableView {
     }
     
     func buildConstraints() {
-        let height = heightAnchor.constraint(equalToConstant: pointSize * 1.2)
+        let height = heightAnchor.constraint(equalToConstant: pointSize * InstructionPresenter.labelShieldScaleFactor)
 
         let imageHeight = imageView.heightAnchor.constraint(equalTo: heightAnchor, multiplier: 0.4)
         let imageAspect = imageView.widthAnchor.constraint(equalTo: imageView.heightAnchor, multiplier: imageView.image?.size.aspectRatio ?? 1.0)
@@ -147,25 +149,21 @@ public class ExitView: StylableView {
     static func criticalHash(side: ExitSide,
                              styleID: String?,
                              dataSource: DataSource,
-                             traitCollection: UITraitCollection) -> String {
+                             traitCollection: UITraitCollection,
+                             isHighlighted: Bool = false) -> String {
         var appearance = ExitView.appearance(for: UITraitCollection(userInterfaceIdiom: .phone))
         if traitCollection.userInterfaceIdiom == .carPlay {
-            let carPlayTraitCollection = UITraitCollection(userInterfaceIdiom: .carPlay)
+            let traitCollection = UITraitCollection(traitsFrom: [
+                UITraitCollection(userInterfaceIdiom: .carPlay),
+                UITraitCollection(userInterfaceStyle: traitCollection.userInterfaceStyle)
+            ])
             
-            if #available(iOS 12.0, *) {
-                let traitCollection = UITraitCollection(traitsFrom: [
-                    carPlayTraitCollection,
-                    UITraitCollection(userInterfaceStyle: traitCollection.userInterfaceStyle)
-                ])
-                
-                appearance = ExitView.appearance(for: traitCollection)
-            } else {
-                appearance = ExitView.appearance(for: carPlayTraitCollection)
-            }
+            appearance = ExitView.appearance(for: traitCollection)
         }
         
         var criticalProperties: [AnyHashable?] = [
             side,
+            isHighlighted,
             dataSource.font.pointSize,
             appearance.backgroundColor,
             appearance.foregroundColor,
@@ -173,11 +171,8 @@ public class ExitView: StylableView {
             appearance.borderWidth,
             appearance.cornerRadius,
             traitCollection.userInterfaceIdiom.rawValue,
+            traitCollection.userInterfaceStyle.rawValue
         ]
-        
-        if #available(iOS 12.0, *) {
-            criticalProperties.append(traitCollection.userInterfaceStyle.rawValue)
-        }
         
         if let styleID = styleID {
             criticalProperties.append(styleID)

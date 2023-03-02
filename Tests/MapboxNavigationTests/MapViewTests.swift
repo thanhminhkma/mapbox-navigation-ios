@@ -4,15 +4,6 @@ import MapboxMaps
 import TestHelper
 
 class MapViewTests: TestCase {
-    
-    override func setUp() {
-        super.setUp()
-    }
-    
-    override func tearDown() {
-        super.tearDown()
-    }
-    
     func testMapViewTileSetAndSourceIdentifiers() {
         let resourceOptions = ResourceOptions(accessToken: "")
         let mapInitOptions = MapInitOptions(resourceOptions: resourceOptions)
@@ -251,7 +242,7 @@ class MapViewTests: TestCase {
         
         // Simplified Chinese is broken: https://github.com/mapbox/mapbox-maps-ios/issues/652
         mapView.localizeLabels(into: Locale(identifier: "zh-Hans-CN"))
-        assert(roadLabelProperty: "name_en", placeLabelProperty: "name_zh")
+        assert(roadLabelProperty: "name_en", placeLabelProperty: "name_zh-Hans")
         
         XCTAssertNoThrow(mapView.localizeLabels(into: Locale(identifier: "tlh")))
     }
@@ -283,5 +274,17 @@ class MapViewTests: TestCase {
                      "Middle French not supported despite sharing prefix with French.")
         XCTAssertNil(VectorSource.preferredMapboxStreetsLocale(for: Locale(identifier: "tlh")),
                      "Klingon not yet implemented. 🖖")
+    }
+
+    func testCreateTilesetDescriptor() {
+        let resourceOptions = ResourceOptions(accessToken: "")
+        let mapInitOptions = MapInitOptions(resourceOptions: resourceOptions)
+        let mapView = MapView(frame: UIScreen.main.bounds, mapInitOptions: mapInitOptions)
+
+        let tilesetDescriptor = mapView.tilesetDescriptor(zoomRange: 3...10)
+        XCTAssertNotNil(tilesetDescriptor)
+
+        mapView.mapboxMap.style.uri = StyleURI(rawValue: "https://url")
+        XCTAssertNil(mapView.tilesetDescriptor(zoomRange: 3...10), "Should ignore non mapbox sources")
     }
 }
